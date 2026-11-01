@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Compile check for the Editor scripts (Assets/LifeAsDuburi/Editor) against
+       hand-written UnityEditor stubs (tools/stubs/UnityEditor).
+         dotnet build                    with the whole Runtime
+         dotnet build -p:Module=Editor   with only Runtime/App/{Boot,Json,Colors}.cs -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>Assembly-CSharp-Editor</AssemblyName>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <WarningsAsErrors>CS0618;CS0612;CS0619</WarningsAsErrors>
+    <NoWarn>CS0649;CS0414</NoWarn>
+    <DefineConstants>UNITY_2021_3_OR_NEWER;UNITY_2022_3_OR_NEWER;UNITY_2023_1_OR_NEWER;UNITY_6000_0_OR_NEWER;UNITY_6000_3_OR_NEWER;ENABLE_INPUT_SYSTEM;UNITY_EDITOR;UNITY_EDITOR_WIN</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../../LifeAsDuburi/Core/**/*.cs" Condition="'$(Module)' != 'Editor'" />
+    <Compile Include="../../../LifeAsDuburi/Editor/**/*.cs" />
+    <Compile Include="../../stubs/URP/**/*.cs" />
+    <Compile Include="../../stubs/Shims/**/*.cs" />
+    <Compile Include="../../stubs/UnityEditor/**/*.cs" />
+    <Reference Include="../../.refs/*.dll" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Module)' != 'Editor'">
+    <Compile Include="../../../LifeAsDuburi/Runtime/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Module)' == 'Editor'">
+    <Compile Include="../../../LifeAsDuburi/Runtime/App/Boot.cs" />
+    <Compile Include="../../../LifeAsDuburi/Runtime/App/Json.cs" />
+    <Compile Include="../../../LifeAsDuburi/Runtime/App/Colors.cs" />
+  </ItemGroup>
+</Project>

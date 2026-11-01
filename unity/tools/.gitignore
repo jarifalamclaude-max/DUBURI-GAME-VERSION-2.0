@@ -1,0 +1,6 @@
+.refs/
+bin/
+obj/
+bin-*/
+obj-*/
+golden/out/

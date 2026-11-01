@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <Module Condition="'$(Module)' == ''">All</Module>
+    <BaseIntermediateOutputPath>obj-$(Module)/</BaseIntermediateOutputPath>
+    <OutputPath>bin-$(Module)/</OutputPath>
+  </PropertyGroup>
+</Project>

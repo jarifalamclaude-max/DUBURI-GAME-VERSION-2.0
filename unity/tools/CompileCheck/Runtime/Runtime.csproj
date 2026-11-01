@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Compile check for the Unity runtime code against Unity's engine reference
+       assemblies, uGUI 2.0 and Input System 1.14 (built from source into
+       tools/.refs) and hand-written URP stubs (tools/stubs/URP). Nothing here ships.
+         dotnet build                         everything, as the WebGL player compiles it
+         dotnet build -p:EditorMode=true      everything, as the Unity Editor compiles it
+         dotnet build -p:Module=Render        Core + Runtime/Render only
+         dotnet build -p:Module=InputAudio    Core + Runtime/Input + Runtime/Audio only
+         dotnet build -p:Module=UI            Core + Runtime/UI against the contract stubs
+                                              of Input, Sound and Render (tools/stubs/Contracts) -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>Assembly-CSharp</AssemblyName>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <WarningsAsErrors>CS0618;CS0612;CS0619</WarningsAsErrors>
+    <NoWarn>CS0649;CS0414</NoWarn>
+    <Defines>UNITY_2021_3_OR_NEWER;UNITY_2022_3_OR_NEWER;UNITY_2023_1_OR_NEWER;UNITY_6000_0_OR_NEWER;UNITY_6000_3_OR_NEWER;ENABLE_INPUT_SYSTEM</Defines>
+    <DefineConstants Condition="'$(EditorMode)' != 'true'">$(Defines);UNITY_WEBGL</DefineConstants>
+    <DefineConstants Condition="'$(EditorMode)' == 'true'">$(Defines);UNITY_EDITOR;UNITY_EDITOR_WIN</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../../LifeAsDuburi/Core/**/*.cs" Condition="'$(Module)' != 'InputAudio'" />
+    <Compile Include="../../stubs/Shims/**/*.cs" />
+    <Reference Include="../../.refs/*.dll" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Module)' == 'All'">
+    <Compile Include="../../../LifeAsDuburi/Runtime/**/*.cs" />
+    <Compile Include="../../stubs/URP/**/*.cs" />
+    <Compile Include="../../stubs/UnityEditor/**/*.cs" Condition="'$(EditorMode)' == 'true'" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Module)' != 'All' And '$(Module)' != 'Core'">
+    <Compile Include="../../../LifeAsDuburi/Runtime/App/Json.cs" />
+    <Compile Include="../../../LifeAsDuburi/Runtime/App/Colors.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Module)' == 'Render'">
+    <Compile Include="../../../LifeAsDuburi/Runtime/Render/**/*.cs" />
+    <Compile Include="../../stubs/URP/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Module)' == 'InputAudio'">
+    <Compile Include="../../../LifeAsDuburi/Runtime/Input/**/*.cs" />
+    <Compile Include="../../../LifeAsDuburi/Runtime/Audio/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Module)' == 'UI'">
+    <Compile Include="../../../LifeAsDuburi/Runtime/UI/**/*.cs" />
+    <Compile Include="../../stubs/Contracts/**/*.cs" />
+  </ItemGroup>
+</Project>

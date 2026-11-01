@@ -1,0 +1,8 @@
+<Project>
+  <!-- separate obj/bin per module + mode so checks can run at the same time -->
+  <PropertyGroup>
+    <Module Condition="'$(Module)' == ''">All</Module>
+    <BaseIntermediateOutputPath>obj-$(Module)-$(EditorMode)/</BaseIntermediateOutputPath>
+    <OutputPath>bin-$(Module)-$(EditorMode)/</OutputPath>
+  </PropertyGroup>
+</Project>
