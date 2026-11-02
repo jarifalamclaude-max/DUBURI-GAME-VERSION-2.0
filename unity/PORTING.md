@@ -44,6 +44,8 @@ unity/
       UI/                   = src/ui/menu.js, hud.js, controls.js, style.css, overlays of main.js (uGUI built in code)
       Input/                = src/ui/input.js (Input System)
       Audio/                = src/ui/audio.js
+    Plugins/WebGL/DuburiAudio.jslib  the browser game's Web Audio engine for WebGL builds
+                            (generated from ../src/ui/audio.js by tools/build-audio-jslib.mjs)
     Editor/                 Set Up Project / Build WebGL menu items, namespace Duburi.EditorTools
     Resources/Duburi/Art    logo + handbook images (jpg)  -> Resources.Load<Texture2D>("Duburi/Art/logo")
     Resources/Duburi/Fonts  Saira Semi Condensed + IBM Plex Mono (OFL) -> Resources.Load<Font>("Duburi/Fonts/SairaSemiCondensed-SemiBold")
@@ -83,7 +85,12 @@ Real sources to look APIs up in (read-only, not part of the project):
   `LegacyRuntime.ttf`; we ship our own fonts anyway). `tools/check.sh lint` enforces this.
 * Persistence: `PlayerPrefs` (works on WebGL) with the same keys and JSON as the
   browser's localStorage: `life-as-duburi-controls-v1`, `life-as-duburi-setup-v2`,
-  `life-as-duburi-quality`. JSON: `Duburi.Game.Json` (Runtime/App/Json.cs).
+  `life-as-duburi-quality`, plus `life-as-duburi-muted` (new).
+* The only AudioListener belongs to Sound (its 'Sound' GameObject): never add
+  one to a camera.
+* Inside `namespace Duburi.Game`, `Game` is the namespace and `Environment`
+  clashes with `System.Environment`: write `Duburi.Core.Game` or use aliases
+  (`using CoreGame = Duburi.Core.Game; using Env = Duburi.Core.Environment;`). JSON: `Duburi.Game.Json` (Runtime/App/Json.cs).
 * Colours: `Duburi.Game.Colors.Hex("#ffb547")`, `Colors.Rgb(0x2f9fc4)`.
 * Keep per-frame allocations low (WebGL GC); cache lists, no LINQ in Update paths.
 * Obsolete APIs are compile errors in the checks (they may be removed in Unity 6).
@@ -140,7 +147,9 @@ them, and `Shader.Find` only finds shaders that are in the build. So:
   a VolumeProfile with Bloom, Tonemapping (ACES), ColorAdjustments and Vignette
   (all overrides active), so their shader variants are in the build. Render
   loads it with `Resources.Load<VolumeProfile>("Duburi/PostProfile")` and clones
-  it per view (`Object.Instantiate`). Per-view grading uses one global Volume per
+  it per view (`Object.Instantiate`). Only use the components in the template
+  (URP keeps only the post shader variants found in VolumeProfile assets); do
+  not turn on Bloom high-quality filtering or lens dirt. Per-view grading uses one global Volume per
   view on its own layer (layers 24..27) and the camera's `volumeLayerMask`.
   Bot thumbnails render on layer 29 (camera culling mask + light culling mask).
 * Material keywords in Set Up Project: set the URP properties by hand (`_Surface`,
