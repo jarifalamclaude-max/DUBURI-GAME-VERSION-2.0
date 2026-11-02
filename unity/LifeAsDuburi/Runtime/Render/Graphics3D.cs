@@ -51,21 +51,37 @@ namespace Duburi.Game
 
         public static void Apply()
         {
+            Compute(hemiSky, hemiGround, hemiI, env, out var sky, out var eq, out var ground);
+            Set(sky, eq, ground);
+        }
+
+        /// the trilight colours (linear) for a hemisphere light (linear colours, three intensity) plus an
+        /// environment's diffuse part
+        public static void Compute(Color skyLinear, Color groundLinear, float intensity, EnvLight e, out Color sky, out Color eq, out Color ground)
+        {
             // three HemisphereLight: irradiance = mix(ground, sky, 0.5 n.y + 0.5) * intensity, diffuse = irradiance / PI
-            float k = hemiI / Mathf.PI;
-            Color sky = hemiSky * k, ground = hemiGround * k, eq = (hemiSky + hemiGround) * 0.5f * k;
-            if (env != null)
+            float k = intensity / Mathf.PI;
+            sky = skyLinear * k; ground = groundLinear * k; eq = (skyLinear + groundLinear) * 0.5f * k;
+            if (e != null)
             {
-                sky += env.up * env.intensity;
-                eq += env.side * env.intensity;
-                ground += env.down * env.intensity;
+                sky += e.up * e.intensity;
+                eq += e.side * e.intensity;
+                ground += e.down * e.intensity;
             }
+        }
+
+        /// RenderSettings trilight ambient from linear colours
+        public static void Set(Color skyLinear, Color eqLinear, Color groundLinear)
+        {
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = sky.gamma;
-            RenderSettings.ambientEquatorColor = eq.gamma;
-            RenderSettings.ambientGroundColor = ground.gamma;
+            RenderSettings.ambientSkyColor = skyLinear.gamma;
+            RenderSettings.ambientEquatorColor = eqLinear.gamma;
+            RenderSettings.ambientGroundColor = groundLinear.gamma;
             RenderSettings.ambientIntensity = 1f;
         }
+
+        /// the environment currently in the ambient (SceneExtras)
+        public static EnvLight Environment => env;
     }
 
     public static class Graphics3D
@@ -176,8 +192,12 @@ namespace Duburi.Game
                 scenery.SetSunDirection(-scenery.SunDir);
                 return null;
             }
-            sun.shadows = LightShadows.Soft;
+            sun.shadows = LightShadows.Soft;   // PCFSoftShadowMap
             sun.shadowStrength = 1f;
+            // the floor and everything in the water receive
+            if (scenery.root != null)
+                foreach (var r in scenery.root.GetComponentsInChildren<MeshRenderer>(true))
+                    if (!Mats.IsTransparent(r.sharedMaterial)) r.receiveShadows = true;
             // sun.position.set(9, 45, 14); sun.target.position.set(0, -arena.depth, 0)
             var from = new Vector3(9, 45, 14);
             var to = new Vector3(0, (float)-arena.depth, 0);

@@ -40,6 +40,10 @@ namespace Duburi.Game
             t.localRotation = threeQuat;
         }
 
+        Renderer[] renderers;
+        /// every renderer of the vehicle (RenderHooks.CamState.hide / Views.HideFor)
+        public Renderer[] Renderers => renderers ?? (renderers = group != null ? group.GetComponentsInChildren<Renderer>(true) : new Renderer[0]);
+
         public bool Visible
         {
             get => group.activeSelf;
@@ -93,6 +97,7 @@ namespace Duburi.Game
             if (group != null) UnityEngine.Object.Destroy(group);
             owned.DestroyAll();
             group = null;
+            renderers = null;
         }
     }
 

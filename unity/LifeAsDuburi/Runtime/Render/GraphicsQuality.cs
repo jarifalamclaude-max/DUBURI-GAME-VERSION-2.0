@@ -95,8 +95,9 @@ namespace Duburi.Game
             // renderer.setPixelRatio(min(devicePixelRatio, q.pixelRatio)): Unity renders at device pixels
             float dpr = DevicePixelRatio();
             a.renderScale = Mathf.Clamp(Mathf.Min(dpr, q.pixelRatio) / dpr, 0.1f, 2f);
-            // post 'high' renders the scene with 4x MSAA; 'low' and no post have none
-            a.msaaSampleCount = q.post == "high" ? 4 : 1;
+            // post 'high' renders the scene into a 4x MSAA target, post 'low' has none, and without post
+            // the canvas itself is antialiased (WebGLRenderer({ antialias: !post }))
+            a.msaaSampleCount = q.post == "low" ? 1 : 4;
             if (q.shadows > 0)
             {
                 a.mainLightShadowmapResolution = q.shadows;
@@ -105,6 +106,16 @@ namespace Duburi.Game
             }
             // HDR stays on at every level: the JS tone-maps (ACES) on Low too
             a.supportsHDR = true;
+        }
+
+        /// the render scale in use (1 without a URP asset)
+        public static float RenderScale
+        {
+            get
+            {
+                var cur = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+                return cur != null ? cur.renderScale : 1f;
+            }
         }
 
         /// The browser's devicePixelRatio (Unity WebGL reports dpi = 96 * devicePixelRatio).

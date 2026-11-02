@@ -2,6 +2,7 @@
 // that LifeAsDuburi/Runtime/Render uses. Only members that exist in the real package with the
 // same signature; '// file:line' = where it is declared in
 // Packages/com.unity.render-pipelines.core/Runtime. Bodies are dummies.
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace UnityEngine.Rendering
@@ -19,6 +20,8 @@ namespace UnityEngine.Rendering
     // Volume/VolumeProfile.cs:14
     public sealed partial class VolumeProfile : ScriptableObject
     {
+        public List<VolumeComponent> components = new List<VolumeComponent>();                       // Volume/VolumeProfile.cs:19
+        public T Add<T>(bool overrides = false) where T : VolumeComponent => null;                          // Volume/VolumeProfile.cs:92
         public bool TryGet<T>(out T component) where T : VolumeComponent { component = null; return false; } // Volume/VolumeProfile.cs:231
     }
 
@@ -47,6 +50,19 @@ namespace UnityEngine.Rendering
     public partial class BoolParameter : VolumeParameter<bool>
     {
         public BoolParameter(bool value, bool overrideState = false) : base(value, overrideState) { } // Volume/VolumeParameter.cs:358
+    }
+
+    // Volume/VolumeParameter.cs:434
+    public partial class IntParameter : VolumeParameter<int>
+    {
+        public IntParameter(int value, bool overrideState = false) : base(value, overrideState) { } // Volume/VolumeParameter.cs:441
+    }
+
+    // Volume/VolumeParameter.cs:672
+    public partial class ClampedIntParameter : IntParameter
+    {
+        public override int value { get; set; }                  // Volume/VolumeParameter.cs:692
+        public ClampedIntParameter(int value, int min, int max, bool overrideState = false) : base(value, overrideState) { } // Volume/VolumeParameter.cs:705
     }
 
     // Volume/VolumeParameter.cs:779

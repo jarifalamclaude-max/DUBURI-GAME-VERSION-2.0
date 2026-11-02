@@ -41,7 +41,7 @@ namespace Duburi.Game
         Texture2D BoardTexture(Board board)
         {
             const int N = 512;
-            var g = new Raster(N, N);
+            var g = new Canvas2D(N, N);
             float S = (float)board.size;
             Vector2 ToPx(double u, double v) => new Vector2(((float)u / S + 0.5f) * N, (0.5f - (float)v / S) * N);
             void Shape(BoardOpening o, float grow)
@@ -52,13 +52,13 @@ namespace Duburi.Game
                 if (o.shape == "square") g.Rect(c.x - r, c.y - r, 2 * r, 2 * r); else g.Arc(c.x, c.y, r, 0, PI * 2);
             }
             var img = Art.Image(board.sharkTop ? "boardSharkTop" : "boardSawfishTop");
-            g.composite = Raster.Op.SourceOver;
+            g.composite = Canvas2D.Op.SourceOver;
             if (img != null) g.DrawImage(img, 0, 0, N, N); else g.FillRect(0, 0, N, N, Colors.Hex("#2f8fc0"));
             var red = Colors.Hex("#e31b1b");
             foreach (var o in board.openings) { Shape(o, 0.0127f); g.Fill(red); }
-            g.composite = Raster.Op.DestinationOut;
+            g.composite = Canvas2D.Op.DestinationOut;
             foreach (var o in board.openings) { Shape(o, 0); g.Fill(Color.black); }
-            g.composite = Raster.Op.SourceOver;
+            g.composite = Canvas2D.Op.SourceOver;
             g.StrokeRect(3, 3, N - 6, N - 6, 6, Colors.Hex("#1b2a3a"));
             return owned.Add(g.ToTexture("board", true, TextureWrapMode.Clamp, 4));
         }
@@ -66,9 +66,9 @@ namespace Duburi.Game
         /// textSprite(text, { color, bg, w, h, font }): label texture (font = bold sans of fontPx)
         public static Texture2D TextSprite(string text, string color = "#fff", string bg = "rgba(0,0,0,0.55)", int w = 256, int h = 64, float fontPx = 34)
         {
-            var g = new Raster(w, h);
-            g.FillRect(0, 0, w, h, Raster.Css(bg));
-            g.FillText(text, w / 2f, h / 2f + 2, fontPx, Raster.Css(color));
+            var g = new Canvas2D(w, h);
+            g.FillRect(0, 0, w, h, Canvas2D.Css(bg));
+            g.FillText(text, w / 2f, h / 2f + 2, fontPx, Canvas2D.Css(color));
             return g.ToTexture("label:" + text, true, TextureWrapMode.Clamp, 1);
         }
 

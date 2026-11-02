@@ -20,6 +20,7 @@ namespace UnityEngine.Rendering.Universal
     public static partial class CameraExtensions
     {
         public static UniversalAdditionalCameraData GetUniversalAdditionalCameraData(this Camera camera) => null; // UniversalAdditionalCameraData.cs:182
+        public static void SetVolumeFrameworkUpdateMode(this Camera camera, VolumeFrameworkUpdateMode mode) { } // UniversalAdditionalCameraData.cs:216
     }
 
     // UniversalAdditionalCameraData.cs:442
@@ -49,6 +50,14 @@ namespace UnityEngine.Rendering.Universal
         public Vector2 lightCookieOffset { get; set; }           // UniversalAdditionalLightData.cs:150
     }
 
+    // Data/UniversalRenderPipelineAsset.cs:318
+    public enum VolumeFrameworkUpdateMode
+    {
+        EveryFrame = 0,                        // Data/UniversalRenderPipelineAsset.cs:324
+        ViaScripting = 1,                      // Data/UniversalRenderPipelineAsset.cs:330
+        UsePipelineSettings = 2,               // Data/UniversalRenderPipelineAsset.cs:336
+    }
+
     // Data/UniversalRenderPipelineAsset.cs:458 — the real base is RenderPipelineAsset<UniversalRenderPipeline>
     // (a Unity 2023+ generic subclass of RenderPipelineAsset that the 2021.3 reference assemblies lack);
     // declared abstract here only so the stub needs no CreatePipeline body.
@@ -62,6 +71,19 @@ namespace UnityEngine.Rendering.Universal
         public int shadowCascadeCount { get; set; }              // Data/UniversalRenderPipelineAsset.cs:1472
     }
 
+    // Overrides/Bloom.cs:8
+    public enum BloomDownscaleMode
+    {
+        Half,                                  // Overrides/Bloom.cs:13
+        Quarter,                               // Overrides/Bloom.cs:18
+    }
+
+    // Overrides/Bloom.cs:259
+    public sealed partial class DownscaleParameter : VolumeParameter<BloomDownscaleMode>
+    {
+        public DownscaleParameter(BloomDownscaleMode value, bool overrideState = false) : base(value, overrideState) { } // Overrides/Bloom.cs:266
+    }
+
     // Overrides/Bloom.cs:167
     public sealed partial class Bloom : VolumeComponent
     {
@@ -70,6 +92,8 @@ namespace UnityEngine.Rendering.Universal
         public ClampedFloatParameter scatter;                    // Overrides/Bloom.cs:188
         public ColorParameter tint;                              // Overrides/Bloom.cs:201
         public BoolParameter highQualityFiltering;               // Overrides/Bloom.cs:208
+        public DownscaleParameter downscale;                     // Overrides/Bloom.cs:220
+        public ClampedIntParameter maxIterations;                // Overrides/Bloom.cs:226
     }
 
     // Overrides/Tonemapping.cs:8

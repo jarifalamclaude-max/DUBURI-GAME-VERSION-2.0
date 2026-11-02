@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace Duburi.Game
 {
-    public sealed class Raster
+    public sealed class Canvas2D
     {
         public readonly int W, H;
         readonly float[] r, g, b, a;
@@ -27,7 +27,7 @@ namespace Duburi.Game
         float[] cov;
         const int SS = 4; // vertical sub-scanlines per pixel
 
-        public Raster(int w, int h)
+        public Canvas2D(int w, int h)
         {
             W = w; H = h;
             r = new float[w * h]; g = new float[w * h]; b = new float[w * h]; a = new float[w * h];

@@ -40,6 +40,9 @@ namespace Duburi.Game
         const float TAU = Mathf.PI * 2;
         const int ThumbLayer = 29;
 
+        /// every scenery that is not disposed (BotThumbs switches their suns off while it renders)
+        internal static readonly List<Scenery> Live = new List<Scenery>();
+
         public GameObject root;
         public Light Sun;
         public ScenarioLook look;
@@ -123,7 +126,7 @@ namespace Duburi.Game
 
         // ---------------------------------------------------------------- canvas textures
 
-        static Texture2D ToTexture(Raster cv, string name, bool srgb = true) =>
+        static Texture2D ToTexture(Canvas2D cv, string name, bool srgb = true) =>
             cv.ToTexture(name, true, TextureWrapMode.Repeat, 8, srgb);
 
         // tileable value noise on a G x G lattice, domain [0,1)^2
@@ -166,18 +169,18 @@ namespace Duburi.Game
             };
         }
 
-        static Raster PaintPixels(int S, Action<double, double, float[]> fn)
+        static Canvas2D PaintPixels(int S, Action<double, double, float[]> fn)
         {
-            var cv = new Raster(S, S);
+            var cv = new Canvas2D(S, S);
             cv.Paint((u, v, rgb) => fn(u, v, rgb));
             return cv;
         }
 
         // 1 m period: 4 x 4 light-blue pool tiles with grout
-        static Raster TilesCanvas()
+        static Canvas2D TilesCanvas()
         {
             const int S = 256, n = 4, t = S / n, gw = 4;
-            var g = new Raster(S, S);
+            var g = new Canvas2D(S, S);
             var rnd = Mulberry32(7);
             g.FillRect(0, 0, S, S, Colors.Hex("#86b9c9"));
             for (int j = 0; j < n; j++)
@@ -194,7 +197,7 @@ namespace Duburi.Game
         static float JsRound(double x) => (float)Math.Floor(x + 0.5);
 
         // 4 m period
-        static Raster SandCanvas(bool pale)
+        static Canvas2D SandCanvas(bool pale)
         {
             var rnd = Mulberry32(21);
             var n1 = ValueNoise(6, rnd);
@@ -208,7 +211,7 @@ namespace Duburi.Game
             });
         }
 
-        static Raster GravelCanvas()
+        static Canvas2D GravelCanvas()
         {
             var rnd = Mulberry32(33);
             var w = Worley(14, rnd);
@@ -225,7 +228,7 @@ namespace Duburi.Game
             });
         }
 
-        static Raster RockCanvas()
+        static Canvas2D RockCanvas()
         {
             var rnd = Mulberry32(45);
             var a = ValueNoise(4, rnd);
@@ -243,9 +246,9 @@ namespace Duburi.Game
             });
         }
 
-        static Raster SpriteCanvas()
+        static Canvas2D SpriteCanvas()
         {
-            var g = new Raster(64, 64);
+            var g = new Canvas2D(64, 64);
             g.RadialGradient(32, 32, 32, new[] { 0f, 0.35f, 1f }, new[] { new Color(1, 1, 1, 1), new Color(1, 1, 1, 0.55f), new Color(1, 1, 1, 0) });
             return g;
         }
@@ -489,6 +492,7 @@ namespace Duburi.Game
             s.Build(world, scenario, logoTexture, arena ?? new Arena { length = 50, width = 25, depth = 4.8 }, clearZones ?? new ClearZone[0]);
             RenderHooks.Ensure();
             RenderHooks.BeginCamera += s.OnBeginCamera;
+            Live.Add(s);
             return s;
         }
 
@@ -637,7 +641,6 @@ namespace Duburi.Game
                     followers.Add(new Follower { node = node, basePos = c });
                 }
             }
-            Func<int, Color> Pick(int[] arr) => _ => C(arr[(int)Math.Floor(rnd() * arr.Length)]);
             int PickHex(int[] arr) => arr[(int)Math.Floor(rnd() * arr.Length)];
             Color Tint(int hex, double v) { var c = C(hex); double dh = (rnd() - 0.5) * 0.04, dl = (rnd() - 0.5) * v; return OffsetHSL(c, dh, 0, dl); }
 
@@ -652,7 +655,7 @@ namespace Duburi.Game
             water = MakeDynMesh(waterGeo, "water", false);
 
             // ---- floor
-            Raster floorCv = isPool ? TilesCanvas() : look.floor == "gravel" ? GravelCanvas() : look.floor == "rock" ? RockCanvas() : SandCanvas(look.life == "reef");
+            Canvas2D floorCv = isPool ? TilesCanvas() : look.floor == "gravel" ? GravelCanvas() : look.floor == "rock" ? RockCanvas() : SandCanvas(look.life == "reef");
             var floorTex = owned.Add(ToTexture(floorCv, "floor"));
             var floorMat = new Mat3 { map = floorTex, color = Color.white, roughness = 0.95f, metalness = 0 };
             Geo floorGeo;
@@ -1284,7 +1287,8 @@ namespace Duburi.Game
             snowRenderer.sortMode = ParticleSystemSortMode.None;
             snowRenderer.shadowCastingMode = ShadowCastingMode.Off;
             snowRenderer.receiveShadows = false;
-            var m = new Mat3 { kind = MatKind.Points, map = sprite, color = colLinear, opacity = colLinear.a, name = "particles" };
+            // THREE.AdditiveBlending: gl_FragColor = uColor * (sprite.a * vA * uOpacity)
+            var m = new Mat3 { kind = MatKind.Points, map = sprite, color = colLinear, opacity = colLinear.a, additive = true, depthWrite = false, name = "particles" };
             snowRenderer.sharedMaterial = owned.Add(Mats.Create(m));
             snowParticles = new ParticleSystem.Particle[n];
             for (int i = 0; i < n; i++)
@@ -1610,6 +1614,7 @@ namespace Duburi.Game
         {
             RenderHooks.BeginCamera -= OnBeginCamera;
             RenderHooks.Forget(this);
+            Live.Remove(this);
             if (root != null) UnityEngine.Object.Destroy(root);
             if (Sun != null) UnityEngine.Object.Destroy(Sun.gameObject);
             if (snowGo != null) UnityEngine.Object.Destroy(snowGo);

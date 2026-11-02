@@ -56,7 +56,7 @@ namespace Duburi.Game
         public static Texture2D AnimalIcon(string animal) => Image(animal == "shark" ? "binShark" : "binSawfish");
 
         /// drawAnimal(g, animal, cx, cy, size, flip): side view facing right, 'size' px long
-        public static void DrawAnimal(Raster g, string animal, float cx, float cy, float size, bool flip = false)
+        public static void DrawAnimal(Canvas2D g, string animal, float cx, float cy, float size, bool flip = false)
         {
             g.Save();
             g.Translate(cx, cy);
