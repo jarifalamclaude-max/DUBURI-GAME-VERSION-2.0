@@ -129,10 +129,60 @@ error and where it happened) and send it to the team; click it to hide it.
    for the web"), open it in Chrome and Firefox. Check sound after the first
    click, a gamepad after its first button press, the frame rate with 4 players
    on High and Low, and that a page reload keeps controls, lobby setup,
-   quality and mute. Note: the build uses "explicitly thrown exceptions only",
-   so a null-reference crash stops the WebGL player with a browser message
-   instead of the red box; for a debugging build set Project Settings > Player >
-   WebGL > Publishing Settings > Enable Exceptions to *Full Without Stacktrace*.
+   quality and mute. Note: Set Up Project sets Project Settings > Player > WebGL >
+   Publishing Settings > Enable Exceptions to *Full Without Stacktrace*: a null
+   reference or index error is caught by the game, which keeps running and shows
+   the red box (without the "at ..." line; for that, pick *Full With Stacktrace*
+   for a debugging build — it is much slower). With *Explicitly Thrown
+   Exceptions Only* such an error would stop the whole WebGL player instead.
+
+## Known risks / first things to check in Unity
+
+Nothing here has run inside Unity yet: the code compiles against Unity 6.3's
+reference assemblies and the game rules match the browser game bit for bit, but
+these could only be checked against Unity's source, not seen. Look at them first
+(Console warnings that start with "Life as Duburi:" point at most of them):
+
+1. **Set Up Project report** — every line should be ✓. Then open
+   `Resources/Duburi/Materials/*.mat` and `Resources/Duburi/PostProfile.asset` in the
+   Inspector: the materials should show Surface Type Opaque / Transparent as their
+   names say (no pink), the profile should list Bloom, Tonemapping (ACES), Color
+   Adjustments and Vignette.
+2. **Fog per view** — in a 2-player match put one robot at the surface and one deep:
+   each view should get its own fog (above / under water). The fog colour and density
+   are switched in `RenderPipelineManager.beginCameraRendering`; if Unity sets the
+   fog shader constants once per frame instead of per camera, both views get the
+   same fog (Render/Scenery.cs `OnBeginCamera`).
+3. **Post-processing per view** — bloom, vignette and the under-water colour grade are
+   one Volume per view on layers 24–27. If a view looks ungraded, check its camera's
+   Volume Mask (Inspector, while playing) and that the URP Renderer has
+   Post-processing ticked.
+4. **Shadows and floor caustics** — the sun casts shadows on High / Medium and carries
+   an animated caustic cookie. They need *Main Light: Cast Shadows* and *Light Cookies*
+   on in the URP asset of the active quality level (Project Settings > Quality; on
+   WebGL usually the "Mobile" asset). The game cannot switch these on from code.
+5. **Bot thumbnails** in the lobby (240×150, transparent background) are rendered with
+   `Camera.Render` into an MSAA RenderTexture. If they show black or empty boxes, the
+   render-scale / MSAA path of URP is the suspect (Render/BotThumbs.cs).
+6. **Hiding your own robot** in the front / down cameras uses
+   `Renderer.forceRenderingOff` per camera; check that the other players still see it.
+7. **WebGL sound** — the browser's Web Audio engine runs from
+   `Plugins/WebGL/DuburiAudio.jslib`; it starts on the first click / key. If the build
+   is silent, open the browser console: "Life as Duburi audio unavailable" means the
+   plugin failed to load.
+8. **WebGL resolution** — High caps the pixel ratio at 1.25 using `Screen.dpi / 96` as
+   the browser's devicePixelRatio. If Unity reports another dpi on WebGL, a hi-DPI
+   screen renders at full resolution (slower) or too soft.
+9. **Gamepads in the browser** — only pads the browser reports with the "standard"
+   mapping become Input System `Gamepad`s; others are ignored by the game.
+10. **Frame rate with 4 players** — four cameras each render shadows, MSAA and post.
+    If WebGL is slow on High, compare with Medium / Low first.
+11. **Leaving Play mode** should log nothing. The game puts the URP asset of the
+    quality level back when it stops (it plays on a private copy of it); if Project
+    Settings > Quality shows a missing pipeline asset after Play, re-assign it.
+12. **Enter Play Mode Options** — the code resets its static state for "no domain
+    reload", but that mode was not tried; if a second Play misbehaves, turn domain
+    reload back on (Project Settings > Editor).
 
 ## Troubleshooting
 

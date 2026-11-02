@@ -1700,14 +1700,14 @@ namespace Duburi.Game
             int w = Mathf.RoundToInt((f - k0) * 256);
             var a = keys[k0]; var b = keys[k1];
             for (int i = 0; i < buf.Length; i++) buf[i] = lut[(a[i] * (256 - w) + b[i] * w) >> 8];
-            Texture.LoadRawTextureData(buf);
+            Texture.SetPixelData(buf, 0); // mip 0 only (LoadRawTextureData wants the whole mip chain)
             Texture.Apply(true, false);
         }
 
         void Fill(byte[] key)
         {
             for (int i = 0; i < buf.Length; i++) buf[i] = key[i];
-            Texture.LoadRawTextureData(buf);
+            Texture.SetPixelData(buf, 0); // mip 0 only (LoadRawTextureData wants the whole mip chain)
             Texture.Apply(true, false);
         }
     }

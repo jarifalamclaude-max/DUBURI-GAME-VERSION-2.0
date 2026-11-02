@@ -135,10 +135,32 @@ namespace Duburi.Game
             var cur = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
             if (cur == null) return asset;
             if (cur == asset) return asset;
+            if (asset == null) { qualityBefore = QualitySettings.renderPipeline; installed = true; }
             asset = UnityEngine.Object.Instantiate(cur);
             asset.name = cur.name + " (Life as Duburi)";
             QualitySettings.renderPipeline = asset;
             return asset;
+        }
+
+        static RenderPipelineAsset qualityBefore;
+        static bool installed;
+
+        /// Puts the quality level's own pipeline asset back (App.Dispose): in the Editor the quality
+        /// settings would otherwise keep pointing at the destroyed runtime copy after Play mode.
+        public static void Restore()
+        {
+            if (!installed) return;
+            installed = false;
+            if (QualitySettings.renderPipeline == asset) QualitySettings.renderPipeline = qualityBefore;
+            asset = null; // not destroyed: the pipeline it created is disposed by Unity when it notices the switch
+            qualityBefore = null;
+        }
+
+        // Enter Play Mode without a domain reload keeps statics: start clean.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics()
+        {
+            asset = null; qualityBefore = null; installed = false; current = null; Changed = null;
         }
     }
 }

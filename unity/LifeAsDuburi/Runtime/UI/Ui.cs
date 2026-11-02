@@ -311,7 +311,7 @@ namespace Duburi.Game
         {
             if (radius <= 0 && stroke <= 0 && band == 0) return null; // plain rect: Image without sprite
             string key = "r" + radius + "/" + stroke + "/" + band + "/" + bandW;
-            if (sprites.TryGetValue(key, out var sp)) return sp;
+            if (sprites.TryGetValue(key, out var sp) && sp != null) return sp;
             float R = Mathf.Max(0.5f, radius * K);
             int n = Mathf.Max(2, Mathf.CeilToInt(Mathf.Max(R, stroke * K, bandW * K)));
             int size = 2 * n + 4;
@@ -342,7 +342,7 @@ namespace Duburi.Game
         public static Sprite ShadowSprite(float radius, float m)
         {
             string key = "s" + radius + "/" + m;
-            if (sprites.TryGetValue(key, out var sp)) return sp;
+            if (sprites.TryGetValue(key, out var sp) && sp != null) return sp;
             float R = Mathf.Max(0.5f, radius * K), M = Mathf.Max(1, m * K);
             int n = Mathf.CeilToInt(R + 2 * M);
             int size = 2 * n + 4;
@@ -366,7 +366,7 @@ namespace Duburi.Game
         public static Sprite BarSprite(Color c)
         {
             string key = "bar" + Css.Hex(c);
-            if (sprites.TryGetValue(key, out var sp)) return sp;
+            if (sprites.TryGetValue(key, out var sp) && sp != null) return sp;
             const int w = 64, h = 12, r = 6;
             var px = new Color32[w * h];
             var end = new Color(1, 1, 1, 0x88 / 255f);
@@ -397,7 +397,7 @@ namespace Duburi.Game
         /// texture from a colour function of (u, v) in 0..1, v = 0 at the TOP (CSS gradients)
         public static Texture2D Gradient(string key, int w, int h, Func<float, float, Color> f)
         {
-            if (textures.TryGetValue(key, out var tex)) return tex;
+            if (textures.TryGetValue(key, out var tex) && tex != null) return tex;
             var px = new Color32[w * h];
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)
@@ -465,7 +465,7 @@ namespace Duburi.Game
         /// points in viewBox units, `scale` sprite pixels per unit, origin of the viewBox at `origin`
         public static Sprite PolySprite(string key, int w, int h, float scale, Vector2 origin, float[] xy, bool fill, bool closed, float width, Color color)
         {
-            if (sprites.TryGetValue(key, out var sp)) return sp;
+            if (sprites.TryGetValue(key, out var sp) && sp != null) return sp;
             var r = new Raster(w, h, new Color(color.r, color.g, color.b, 0));
             var pts = new List<Vector2>();
             for (int i = 0; i < xy.Length; i += 2) pts.Add(new Vector2((xy[i] + origin.x) * scale, (xy[i + 1] + origin.y) * scale));

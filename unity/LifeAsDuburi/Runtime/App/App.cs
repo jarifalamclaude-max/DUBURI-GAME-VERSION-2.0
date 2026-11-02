@@ -883,14 +883,25 @@ namespace Duburi.Game
         // ------------------------------------------------------------------ teardown
         public void Dispose()
         {
-            ui.Resized -= OnUiResized;
-            try { DisposeScene(); } catch (Exception e) { Debug.LogException(e); }
-            overlays.Close();
-            post.Dispose();
-            sound.Dispose();
-            input.Dispose();
-            BotThumbs.Clear();
+            // Boot.OnDestroy runs while Unity tears the scene down (leaving Play mode): the UI and other
+            // scene objects may already be gone, so every step runs on its own and a missing object is
+            // not an error
+            if (ui != null) ui.Resized -= OnUiResized;
+            Quiet(DisposeScene);
+            Quiet(overlays.Close);
+            Quiet(post.Dispose);
+            Quiet(sound.Dispose);
+            Quiet(input.Dispose);
+            Quiet(BotThumbs.Clear);
             if (world != null) UnityEngine.Object.Destroy(world.gameObject);
+            Quiet(GraphicsQuality.Restore);
+        }
+
+        static void Quiet(Action step)
+        {
+            try { step(); }
+            catch (MissingReferenceException) { /* destroyed with the scene */ }
+            catch (Exception e) { Debug.LogException(e); }
         }
     }
 }

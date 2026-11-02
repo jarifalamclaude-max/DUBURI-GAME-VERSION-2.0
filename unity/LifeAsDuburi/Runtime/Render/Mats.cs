@@ -208,6 +208,12 @@ namespace Duburi.Game
             var sh = Shader.Find(shaderName);
             if (sh == null) sh = Shader.Find("Universal Render Pipeline/Simple Lit");
             if (sh == null) sh = Shader.Find("Sprites/Default");
+            if (sh == null)
+            {
+                // a build without the templates and without URP shaders: draw with the UI material rather than throw
+                Debug.LogError("Life as Duburi: no URP shader in this build — run Life as Duburi > Set Up Project and build again.");
+                return new Material(Canvas.GetDefaultCanvasMaterial()) { name = name };
+            }
             var m = new Material(sh) { name = name };
             bool transparent = name.Contains("Transparent") || name.Contains("Additive") || name.StartsWith("Particle");
             bool additive = name.Contains("Additive");

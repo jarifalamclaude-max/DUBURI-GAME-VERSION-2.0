@@ -518,11 +518,15 @@ namespace Duburi.EditorTools
             PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Gzip;
             PlayerSettings.WebGL.decompressionFallback = true;
             PlayerSettings.WebGL.dataCaching = true;
-            PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.ExplicitlyThrownExceptionsOnly;
+            // Full Without Stacktrace: a null reference or an index out of range becomes a C# exception that
+            // App catches (the game keeps running and the red error panel names it). With "explicitly thrown
+            // only" those faults are not checked and the whole WebGL player stops instead. Costs some code
+            // size / speed; FullWithStacktrace would add the stack line but is much slower.
+            PlayerSettings.WebGL.exceptionSupport = WebGLExceptionSupport.FullWithoutStacktrace;
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.WebGL, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.WebGL, new[] { GraphicsDeviceType.OpenGLES3 }); // WebGL 2
             report.Ok("Player settings: \"Life as Duburi\" by Team DUBURI, landscape, runs in background, " + splash +
-                      "; WebGL 2, Gzip + decompression fallback, data caching, explicitly thrown exceptions only");
+                      "; WebGL 2, Gzip + decompression fallback, data caching, full exceptions without stack trace (errors show in the red panel)");
         }
 
         // ---- scene + build list --------------------------------------------------------------
