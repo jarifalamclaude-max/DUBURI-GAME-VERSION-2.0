@@ -92,6 +92,48 @@ changed in the game's Controls screen (saved per device).
 Other stick layouts ("Game", "Racing"), inverted Y and triggers-for-up/down are
 in the Controls screen.
 
+## First playtest checklist
+
+Do this once in the Editor (Play) and once in a WebGL build. If a red box
+appears at the bottom of the screen, take a screenshot of it (it names the
+error and where it happened) and send it to the team; click it to hide it.
+
+1. **Menu** — the title screen shows over the Pacific backdrop: three robots
+   circle slowly with spinning props and bubbles, the camera drifts. Click
+   *How to play* and back; the menu sounds play after the first click / key.
+2. **1 player** — open the lobby, join with Space (keyboard left), pick a robot
+   and colour, start. The key card shows for a few seconds. Drive with
+   W/S/A/D/R/F: bubbles come from the thrusters, the camera follows and stays
+   under the surface and inside the pool. Press 1 to cycle chase / front /
+   down camera (front and down hide your own robot). Drop a marker (V), fire a
+   torpedo (B), grab (C): each has a sound, the HUD shows toasts and points.
+3. **4 players, split screen, with a gamepad** — plug in a controller (the menu
+   flashes "Controller 1 connected"), press ✕ / A to join, add keyboard right
+   (Enter) and a CPU (△ / Y). Start with Options / Menu. Check the quarters, the
+   divider lines and that each HUD sits in its own quarter; with exactly 3
+   players the 4th quarter is the TV camera with the live standings. Resize the
+   window (or rotate a phone): views and HUD follow, 2 players switch between
+   side by side and stacked.
+4. **Pause / quit / results** — Tab, Backspace or a pad's Options opens the
+   pause menu of that player (only their pad moves in it; D-pad + ✕ / A,
+   ○ / B resumes); Esc and the HUD's **Pause** button open the first player's. Try Skip task, Restart match, Controls & customise (re-bind a
+   button, then back), Sound on / off. The always-visible **Quit** button asks
+   first; *Yes* goes back to the lobby. End the match early: in a match
+   without CPUs, end every player's run (3 / 9 / LS click); the match ends a
+   few seconds later and the results appear 2.5 s after that. *Play again* /
+   *Lobby* / *Main menu* work. Quitting in those 2.5 s must not show results.
+5. **Quality switch** — pause > Graphics: High → Medium → Low → High. The
+   picture changes (shadows, bloom, sharpness) without a hitch and the choice is
+   kept after a restart of the game.
+6. **WebGL build** — Life as Duburi > Build WebGL, serve the folder (see "Build
+   for the web"), open it in Chrome and Firefox. Check sound after the first
+   click, a gamepad after its first button press, the frame rate with 4 players
+   on High and Low, and that a page reload keeps controls, lobby setup,
+   quality and mute. Note: the build uses "explicitly thrown exceptions only",
+   so a null-reference crash stops the WebGL player with a browser message
+   instead of the red box; for a debugging build set Project Settings > Player >
+   WebGL > Publishing Settings > Enable Exceptions to *Full Without Stacktrace*.
+
 ## Troubleshooting
 
 * **Everything is pink / magenta** — the materials are missing or the project is
@@ -117,7 +159,12 @@ in the Controls screen.
 LifeAsDuburi/                    copy this folder into Assets/
   Core/                          the game rules and physics, plain C# (no Unity), tested against the JS game
   Runtime/                       the Unity part (namespace Duburi.Game)
-    App/                         Boot (the scene's one component), the game loop and screens, JSON, colours
+    App/                         the game itself (= src/main.js):
+      Boot.cs                      the scene's one component: starts the App, drives it every frame
+      App.cs                       menu backdrop, match start / restart / quit / results, split-screen views
+                                   and cameras, the fixed 120 Hz physics loop, input, sounds, bubbles
+      ErrorPanel.cs                red box at the bottom of the screen when something throws (screenshot it)
+      Json.cs, Colors.cs           small helpers (saved settings, "#rrggbb" colours)
     Render/                      3D scene: robots, pool and sea, lights, cameras, split screen (URP)
     UI/                          menus, HUD, controls screen, overlays (uGUI built in code)
     Input/                       keyboards and gamepads (Input System), key bindings
