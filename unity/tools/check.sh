@@ -50,7 +50,8 @@ case "$what" in
   Render|InputAudio|UI|Core)
     build "$here/CompileCheck/Runtime/Runtime.csproj" -p:Module="$what" ;;
   Editor)
-    build "$here/CompileCheck/Editor/Editor.csproj" -p:Module=Editor ;;
+    # the Editor scripts with the whole Runtime (Boot now needs App), as Unity compiles them
+    build "$here/CompileCheck/Editor/Editor.csproj" ;;
   all)
     lint
     build "$here/CompileCheck/Runtime/Runtime.csproj"
