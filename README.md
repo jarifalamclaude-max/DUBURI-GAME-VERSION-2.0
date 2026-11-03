@@ -32,7 +32,7 @@ in the Unity Editor (Play) and should work as a desktop or Android build.
 
 * **Unity Hub** (free): https://unity.com/download
 * **Unity 6.3 LTS** (version 6000.3.x), installed from Unity Hub, with the module
-  **WebGL Build Support** (tick it when you install, or add it later:
+  **Web Build Support** (called *WebGL Build Support* in older Unity versions; tick it when you install, or add it later:
   Unity Hub > Installs > ⚙ > Add modules).
 
 ### Open it
@@ -214,7 +214,7 @@ these could only be checked against Unity's source, not seen. Look at them first
 * **Errors about `UnityEngine.InputSystem` right after copying** — install the
   package: Window > Package Manager > Unity Registry > Input System > Install.
 * **No WebGL in Build WebGL / "module not installed"** — Unity Hub > Installs >
-  your Unity 6.3 > ⚙ > Add modules > WebGL Build Support, then restart Unity.
+  your Unity 6.3 > ⚙ > Add modules > **Web Build Support**, then restart Unity.
 * **Gamepad not seen in the browser** — browsers only show a gamepad after you
   press a button on it while the page has focus. Press any button.
 * **No sound in the browser** — browsers start audio only after the first click

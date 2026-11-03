@@ -49,7 +49,7 @@ namespace Duburi.EditorTools
             if (!BuildPipeline.IsBuildTargetSupported(BuildTargetGroup.WebGL, BuildTarget.WebGL))
             {
                 EditorUtility.DisplayDialog("Build WebGL",
-                    "The WebGL Build Support module is not installed.\n\nUnity Hub > Installs > (this Unity version) > ⚙ > Add modules > WebGL Build Support, then restart Unity.",
+                    "The Web Build Support module is not installed.\n\nUnity Hub > Installs > (this Unity version) > ⚙ > Add modules > Web Build Support, then restart Unity.",
                     "OK");
                 return;
             }
