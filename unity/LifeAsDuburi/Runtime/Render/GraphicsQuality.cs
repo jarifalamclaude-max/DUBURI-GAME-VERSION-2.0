@@ -19,17 +19,20 @@ namespace Duburi.Game
         public int shadows;        // shadow map size, 0 = off
         public float pixelRatio;   // max device pixel ratio
         public int bubbles;        // bubble pool size
+        public int cascades = 1;   // main-light shadow cascades (2 = sharper shadows near the camera)
     }
 
     public static class GraphicsQuality
     {
         public static readonly Dictionary<string, QualitySpec> QUALITY = new Dictionary<string, QualitySpec>
         {
+            // Ultra: the screen's full resolution (4K on a 4K screen), 4x MSAA, 4096 shadows in two cascades
+            ["ultra"] = new QualitySpec { label = "Ultra (4K)", post = "high", shadows = 4096, pixelRatio = 4f, bubbles = 3000, cascades = 2 },
             ["high"] = new QualitySpec { label = "High", post = "high", shadows = 2048, pixelRatio = 1.25f, bubbles = 2000 },
             ["medium"] = new QualitySpec { label = "Medium", post = "low", shadows = 1024, pixelRatio = 1f, bubbles = 1200 },
             ["low"] = new QualitySpec { label = "Low", post = null, shadows = 0, pixelRatio = 1f, bubbles = 600 },
         };
-        public static readonly string[] Order = { "high", "medium", "low" };
+        public static readonly string[] Order = { "ultra", "high", "medium", "low" };
 
         const string STORE = "life-as-duburi-quality";
         /// shadow distance (m): the JS shadow camera covers the whole arena (max(L, W) / 2 + 4 around its centre)
@@ -41,7 +44,7 @@ namespace Duburi.Game
         /// raised after Set() with the new level (Post, scenes and bubbles follow it)
         public static event Action<string> Changed;
 
-        /// current level id ("high" | "medium" | "low"), loaded from PlayerPrefs the first time
+        /// current level id ("ultra" | "high" | "medium" | "low"), loaded from PlayerPrefs the first time
         public static string Current
         {
             get
@@ -64,7 +67,8 @@ namespace Duburi.Game
                 if (QUALITY.ContainsKey(q)) return q;
             }
             catch (Exception) { /* storage unavailable */ }
-            return "high";
+            // first start: full resolution on computers, High on phones and tablets
+            return Application.isMobilePlatform ? "high" : "ultra";
         }
 
         /// saveQuality(q)
@@ -102,7 +106,7 @@ namespace Duburi.Game
             {
                 a.mainLightShadowmapResolution = q.shadows;
                 a.shadowDistance = ShadowDistance;
-                a.shadowCascadeCount = 1;
+                a.shadowCascadeCount = q.cascades;
             }
             // HDR stays on at every level: the JS tone-maps (ACES) on Low too
             a.supportsHDR = true;

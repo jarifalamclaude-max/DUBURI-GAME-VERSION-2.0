@@ -141,7 +141,7 @@ error and where it happened) and send it to the team; click it to hide it.
    without CPUs, end every player's run (3 / 9 / LS click); the match ends a
    few seconds later and the results appear 2.5 s after that. *Play again* /
    *Lobby* / *Main menu* work. Quitting in those 2.5 s must not show results.
-5. **Quality switch** — pause > Graphics: High → Medium → Low → High. The
+5. **Quality switch** — pause > Graphics: Ultra (4K) → High → Medium → Low → Ultra. The
    picture changes (shadows, bloom, sharpness) without a hitch and the choice is
    kept after a restart of the game.
 6. **WebGL build** — Life as Duburi > Build WebGL, serve the folder (see "Build
