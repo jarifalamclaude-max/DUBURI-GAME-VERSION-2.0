@@ -233,6 +233,7 @@ namespace Duburi.Game
                 int k = (int)key - 1;
                 if (k < 0 || k >= nKeys) continue;
                 var kc = kb[key];
+                if (kc == null) continue; // a key this keyboard layout does not have
                 var code = KeyCodes.CodeAt(i);
                 if (kc.isPressed || kc.wasPressedThisFrame)
                 {

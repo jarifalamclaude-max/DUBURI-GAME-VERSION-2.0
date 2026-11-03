@@ -34,9 +34,20 @@ namespace Duburi.Game
 
         void OnLog(string condition, string stackTrace, LogType type)
         {
-            if (type != LogType.Exception && type != LogType.Assert) return;
+            // exceptions, asserts, and the errors the game reports itself ("Life as Duburi: ... [in <where>]",
+            // followed by the exception text)
+            bool ours = type == LogType.Error && condition != null && condition.StartsWith(Prefix, StringComparison.Ordinal);
+            if (type != LogType.Exception && type != LogType.Assert && !ours) return;
             try
             {
+                if (ours)
+                {
+                    int nl = condition.IndexOf('\n');
+                    string head = (nl < 0 ? condition : condition.Substring(0, nl)).Substring(Prefix.Length);
+                    string at = nl < 0 ? null : FirstAtLine(condition.Substring(nl + 1));
+                    Set(head + (at != null ? "\n  " + at : ""));
+                    return;
+                }
                 string first = FirstLine(stackTrace);
                 Set(condition + (first != null ? "\n  at " + first : ""));
             }
@@ -58,6 +69,19 @@ namespace Duburi.Game
             count++;
             message = msg != null && msg.Length > MaxChars ? msg.Substring(0, MaxChars) + "…" : msg;
             dirty = true;
+        }
+
+        const string Prefix = "Life as Duburi: ";
+
+        // the first "at ..." line of an exception's text (none in WebGL builds without stack traces)
+        static string FirstAtLine(string text)
+        {
+            foreach (var raw in text.Split('\n'))
+            {
+                string line = raw.Trim();
+                if (line.StartsWith("at ", StringComparison.Ordinal)) return line;
+            }
+            return null;
         }
 
         static string FirstLine(string stack)

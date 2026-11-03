@@ -161,22 +161,25 @@ namespace Duburi.Game
             Fps += (1f / Mathf.Max(dt, 1e-3f) - Fps) * 0.05f;
             try
             {
-                input.Poll();
-                UnlockAudio();
+                step = "input"; input.Poll();
+                step = "audio unlock"; UnlockAudio();
+                step = "resize";
                 if (Screen.width != W || Screen.height != H) { Resize(); layoutDirty = true; } // the canvas scale settles later: lay out again
                 else if (layoutDirty) { layoutDirty = false; if (views != null) LayoutViews(); }
-                overlays.Tick(); // capture keys, menu navigation keys, navPoll, live pad drawing
+                step = "overlays"; overlays.Tick(); // capture keys, menu navigation keys, navPoll, live pad drawing
                 if (state == "game" && game != null)
                 {
                     // main.js onKey: Escape opens the pause menu of the first viewed player
+                    step = "pause key";
                     if (!overlays.IsOpen && input.Consume("Escape")) OpenPause(viewPlayers.Count > 0 ? viewPlayers[0] : 0);
                     if (game != null) GameFrame(dt);
                 }
                 else
                 {
-                    menu.Poll();
+                    step = "menu"; menu.Poll();
                     MenuFrame(dt);
                 }
+                step = "results";
                 // showResults 2.5 s after the match ended: only for the match on screen, never after quitting
                 if (resultsFor != null && Time.unscaledTime >= resultsAt)
                 {
@@ -194,6 +197,7 @@ namespace Duburi.Game
         {
             try
             {
+                step = "late layout";
                 if (layoutDirty && Screen.width == W && Screen.height == H)
                 {
                     layoutDirty = false;
@@ -201,6 +205,7 @@ namespace Duburi.Game
                 }
                 if (drawnVersion != sceneVersion)
                 {
+                    step = "late draw";
                     if (state == "game" && game != null && views != null)
                     {
                         SyncMeshes((float)Math.Min(1, acc / Vehicle.DT), 0);
@@ -213,13 +218,16 @@ namespace Duburi.Game
             catch (Exception e) { Report(e); }
         }
 
+        // which part of the frame is running: shown with an error, because WebGL builds have no stack traces
+        string step = "start";
+
         // keep the loop going after an exception: log it once (the error panel shows it), count repeats
         void Report(Exception e)
         {
-            string key = e.GetType().Name + ": " + e.Message;
+            string key = e.GetType().Name + ": " + e.Message + " [in " + step + "]";
             if (key == lastError) { errors?.Repeat(); return; }
             lastError = key;
-            Debug.LogException(e);
+            Debug.LogError("Life as Duburi: " + key + "\n" + e);
         }
 
         // browsers start audio only after a user gesture: any key, click, tap or new pad button
@@ -278,13 +286,14 @@ namespace Duburi.Game
         void MenuFrame(float dt)
         {
             if (menuCam != null && scenery != null && extras != null) MenuBackdrop(dt);
-            sound.Tick(dt, menuSound);
+            step = "menu sound"; sound.Tick(dt, menuSound);
         }
 
         void MenuBackdrop(float dt)
         {
             float t = menuTime += dt;
             var B = extras.Bubbles;
+            step = "menu robots";
             for (int k = 0; k < menuBots.Count; k++)
             {
                 var b = menuBots[k];
@@ -304,11 +313,12 @@ namespace Duburi.Game
                     B.Emit(p.x, p.y, p.z, v.x, v.y, v.z, 2, 0.006f);
                 }
             }
-            B?.Update(dt, t);
+            step = "menu bubbles"; B?.Update(dt, t);
+            step = "menu camera";
             menuCam.Position = new Vector3(Mathf.Sin(t * 0.05f) * 1.5f, -1.2f, 4.5f);
             menuCam.LookAt(new Vector3(0, -1.6f, -2));
-            scenery.Update(t, new WaveState { A = 0.1f, K = 0.2f, W = 1.4f, T = t, D = new Vector2(0.5f, 0.86f) });
-            Views.DrawView(menuCam, scenery, extras, post, null);
+            step = "menu scenery"; scenery.Update(t, new WaveState { A = 0.1f, K = 0.2f, W = 1.4f, T = t, D = new Vector2(0.5f, 0.86f) });
+            step = "menu view"; Views.DrawView(menuCam, scenery, extras, post, null);
             drawnVersion = sceneVersion;
         }
 
@@ -626,7 +636,8 @@ namespace Duburi.Game
             var g = game;
             if (!paused && !g.over)
             {
-                HandleInput();
+                step = "game input"; HandleInput();
+                step = "physics";
                 acc += dt;
                 int n = 0;
                 while (acc >= Vehicle.DT && n < 10)
@@ -640,13 +651,14 @@ namespace Duburi.Game
                 if (n == 10) acc = 0;
             }
             float alpha = (float)Math.Min(1, acc / Vehicle.DT);
-            Events();
-            SyncMeshes(alpha, paused ? 0 : dt);
-            Effects(paused ? 0 : dt);
-            Audio(dt);
-            course3d.Update(g.time);
-            scenery.Update((float)g.env.time, g.env);
-            hud.Update(dt);
+            step = "events"; Events();
+            step = "robots"; SyncMeshes(alpha, paused ? 0 : dt);
+            step = "bubbles"; Effects(paused ? 0 : dt);
+            step = "sound"; Audio(dt);
+            step = "course"; course3d.Update(g.time);
+            step = "scenery"; scenery.Update((float)g.env.time, g.env);
+            step = "hud"; hud.Update(dt);
+            step = "cameras";
             for (int i = 0; i < views.Count; i++) RenderView(views[i], dt);
             drawnVersion = sceneVersion;
             if (g.over && !overShown) { overShown = true; resultsFor = g; resultsAt = Time.unscaledTime + ResultsDelay; }

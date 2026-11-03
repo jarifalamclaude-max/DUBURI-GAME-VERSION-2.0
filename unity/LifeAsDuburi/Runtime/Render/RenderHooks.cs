@@ -34,8 +34,16 @@ namespace Duburi.Game
             internal Renderer[] hidden;
         }
 
-        /// raised for every camera that has a state, right before URP renders it
-        public static event Action<Camera, CamState> BeginCamera;
+        /// raised for every camera that has a state, right before URP renders it. Each handler runs on
+        /// its own: one that throws is reported once (with its name: WebGL builds have no stack traces)
+        /// and does not stop the others or flood the log every frame.
+        public static event Action<Camera, CamState> BeginCamera
+        {
+            add { if (value != null && !handlers.Contains(value)) handlers.Add(value); }
+            remove { handlers.Remove(value); }
+        }
+        static readonly List<Action<Camera, CamState>> handlers = new List<Action<Camera, CamState>>();
+        static readonly HashSet<string> reported = new HashSet<string>();
 
         static readonly Dictionary<Camera, CamState> states = new Dictionary<Camera, CamState>();
         static readonly List<Camera> dead = new List<Camera>();
@@ -98,7 +106,16 @@ namespace Duburi.Game
                 for (int i = 0; i < st.hide.Length; i++) if (st.hide[i] != null) st.hide[i].forceRenderingOff = true;
                 st.hidden = st.hide;
             }
-            BeginCamera?.Invoke(cam, st);
+            for (int i = 0; i < handlers.Count; i++)
+            {
+                var h = handlers[i];
+                try { h(cam, st); }
+                catch (Exception e)
+                {
+                    string key = e.GetType().Name + ": " + e.Message + " [in camera render: " + h.Method.DeclaringType?.Name + "." + h.Method.Name + "]";
+                    if (reported.Add(key)) Debug.LogError("Life as Duburi: " + key + "\n" + e);
+                }
+            }
         }
 
         static void OnEndCameraRendering(ScriptableRenderContext ctx, Camera cam)
@@ -118,7 +135,8 @@ namespace Duburi.Game
                 RenderPipelineManager.endCameraRendering -= OnEndCameraRendering;
             }
             hooked = false;
-            BeginCamera = null;
+            handlers.Clear();
+            reported.Clear();
             states.Clear();
         }
     }
