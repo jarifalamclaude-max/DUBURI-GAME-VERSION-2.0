@@ -27,6 +27,11 @@ the real sources listed below.
      the `Duburi.Game.Boot` component, the template materials in
      `Resources/Duburi/Materials/`, texture import settings, fog shader
      stripping, WebGL player settings, and puts the scene first in Build Settings.
+     It also sets every URP asset of the quality levels: HDR, per-pixel sun shadows, soft
+     shadows, light cookies, reflection-probe blending + box projection; adds the
+     ScreenSpaceAmbientOcclusion renderer feature (after opaque, active in the asset;
+     GraphicsQuality switches it per level); turns real-time reflection probes on in every
+     quality level. Run it again after every update of LifeAsDuburi/.
   4. Press Play, or **Life as Duburi → Build WebGL**.
 
 ## Layout
@@ -148,8 +153,12 @@ them, and `Shader.Find` only finds shaders that are in the build. So:
   (all overrides active), so their shader variants are in the build. Render
   loads it with `Resources.Load<VolumeProfile>("Duburi/PostProfile")` and clones
   it per view (`Object.Instantiate`). Only use the components in the template
-  (URP keeps only the post shader variants found in VolumeProfile assets); do
-  not turn on Bloom high-quality filtering or lens dirt. Per-view grading uses one global Volume per
+  (URP keeps only the post shader variants found in VolumeProfile assets).
+  Set Up Project also creates `Resources/Duburi/PostProfileUltra.asset` (the same four +
+  DepthOfField Gaussian with high-quality sampling, Bloom highQualityFiltering on); Post
+  clones it on Ultra only (`Post.UltraProfilePath`) and falls back to PostProfile with a
+  warning when it is missing. Do not turn on Bloom high-quality filtering in PostProfile,
+  nor lens dirt anywhere. Per-view grading uses one global Volume per
   view on its own layer (layers 24..27) and the camera's `volumeLayerMask`.
   Bot thumbnails render on layer 29 (camera culling mask + light culling mask).
 * Material keywords in Set Up Project: set the URP properties by hand (`_Surface`,

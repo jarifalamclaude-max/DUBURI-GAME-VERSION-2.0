@@ -50,9 +50,15 @@ namespace Duburi.Game
             screenRoot = Ui.Node("screen", el);
             Ui.Stretch(screenRoot);
             el.gameObject.SetActive(false);
-            ui.Resized += () => { if (Screen == "title") Show("title"); };
+            ui.Resized += OnResized;
             // a controller plugged in: tell the player how to join / see its layout (main.js gamepadconnected)
             if (input != null) input.PadConnected += i => { if (i >= 0 && Visible) Flash("Controller " + (i + 1) + " connected — press ✕ / A to join, Share / View for its layout"); };
+        }
+
+        // the title screen is laid out for the canvas width (logo, h1 size): build it again
+        void OnResized()
+        {
+            if (Screen == "title") Show("title");
         }
 
         // ---------------------------------------------------------------- saved setup

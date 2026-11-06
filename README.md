@@ -17,7 +17,6 @@ There are two versions in this repository:
   [Browser version (v1.1)](#browser-version-v11).
 
 ## Life as Duburi 2.0 — Unity version
-
 Version 2.0 of *Life as Duburi* is a **Unity 6** version of the game, in the
 [`unity/`](unity) folder: an underwater robotics game for 1 to 4 players on one
 screen (split screen), with keyboards and gamepads. It plays the same as the
@@ -46,6 +45,42 @@ in the Unity Editor (Play) and should work as a desktop or Android build.
    the scene, materials and settings. A window lists what it did. It is safe to
    run again.
 5. Press **Play**.
+
+**Updating:** when you copy a newer `LifeAsDuburi` folder over the old one, run
+**Life as Duburi > Set Up Project again** before you press Play or build. New
+versions add project settings that only Set Up Project can make (the Ultra
+graphics below need it: ambient occlusion, soft shadows, reflections, depth of
+field). Without it the game still runs, with a Console warning that says what is
+missing.
+
+### Graphics levels
+
+Pause menu > **Graphics** cycles Ultra (4K) → High → Medium → Low; the choice is
+saved. Computers start on **Ultra**, phones and tablets on **High**.
+
+* **Ultra (4K)** — the best picture URP can make in a browser (WebGL 2) on a
+  desktop graphics card:
+  * the full screen resolution, and on screens smaller than 4K it renders up to
+    2× larger and scales down (supersampling, the internal image stays within
+    3840 × 2160), plus 4× MSAA (the most WebGL 2 browsers offer): "4K quality on
+    any screen";
+  * screen-space ambient occlusion (soft contact darkening in frame joints,
+    under thrusters, where robots sit on the floor);
+  * soft shadows with URP's highest filter (7×7) from a 4096 shadow map in 4
+    cascades, so the robots shadow themselves cleanly;
+  * live reflections: a real-time reflection probe re-renders the arena all the
+    time, so metal, brass, chrome and acrylic parts reflect the real pool or
+    seabed, the course and the other robots;
+  * under water a subtle depth-of-field blur in the distance and high-quality
+    bloom;
+  * 16× anisotropic texture filtering and sharper caustics and water textures.
+* **High** — the browser game's High: shadows, bloom, 4× MSAA, pixel ratio up to 1.25.
+* **Medium** / **Low** — for weaker computers and phones.
+
+Ultra needs a good graphics card; if a laptop gets slow, pick High. Real
+ray tracing (ray-traced reflections or shadows) is **not possible** in a browser:
+WebGL 2 has no ray-tracing hardware access and URP has no ray tracing, so Ultra
+uses the closest real-time techniques there are.
 
 ### Build for the web
 
@@ -113,9 +148,12 @@ in the Controls screen.
 
 ### First playtest checklist
 
-Do this once in the Editor (Play) and once in a WebGL build. If a red box
-appears at the bottom of the screen, take a screenshot of it (it names the
-error and where it happened) and send it to the team; click it to hide it.
+Do this once in the Editor (Play) and once in a WebGL build. In the Editor and
+in Development builds a red box appears at the bottom of the screen when
+something goes wrong: take a screenshot of it (it names the error and where it
+happened, "[in ...]") and send it to the team; click it to hide it. Release
+builds (what players get) show no box: the same messages go to the browser
+console (F12). Only "could not start" is shown to players.
 
 1. **Menu** — the title screen shows over the Pacific backdrop: three robots
    circle slowly with spinning props and bubbles, the camera drifts. Click
@@ -143,15 +181,20 @@ error and where it happened) and send it to the team; click it to hide it.
    *Lobby* / *Main menu* work. Quitting in those 2.5 s must not show results.
 5. **Quality switch** — pause > Graphics: Ultra (4K) → High → Medium → Low → Ultra. The
    picture changes (shadows, bloom, sharpness) without a hitch and the choice is
-   kept after a restart of the game.
+   kept after a restart of the game. On Ultra: chrome / metal parts reflect the pool
+   or seabed (after a fraction of a second), dark contact shading appears in corners
+   and under the robots, far things under water are slightly soft. No "Ultra graphics
+   run without ..." warning in the Console (if there is one, run Set Up Project again).
 6. **WebGL build** — Life as Duburi > Build WebGL, serve the folder (see "Build
    for the web"), open it in Chrome and Firefox. Check sound after the first
    click, a gamepad after its first button press, the frame rate with 4 players
    on High and Low, and that a page reload keeps controls, lobby setup,
    quality and mute. Note: Set Up Project sets Project Settings > Player > WebGL >
    Publishing Settings > Enable Exceptions to *Full Without Stacktrace*: a null
-   reference or index error is caught by the game, which keeps running and shows
-   the red box (without the "at ..." line; for that, pick *Full With Stacktrace*
+   reference or index error is caught by the game, which keeps running and logs
+   it to the browser console (a Development Build, menu *Life as Duburi → Build
+   WebGL (Development)*, also shows the red box; without
+   the "at ..." line; for that, pick *Full With Stacktrace*
    for a debugging build — it is much slower). With *Explicitly Thrown
    Exceptions Only* such an error would stop the whole WebGL player instead.
 
@@ -166,7 +209,9 @@ these could only be checked against Unity's source, not seen. Look at them first
    `Resources/Duburi/Materials/*.mat` and `Resources/Duburi/PostProfile.asset` in the
    Inspector: the materials should show Surface Type Opaque / Transparent as their
    names say (no pink), the profile should list Bloom, Tonemapping (ACES), Color
-   Adjustments and Vignette.
+   Adjustments and Vignette; `PostProfileUltra.asset` the same plus Depth Of Field.
+   The URP Renderer asset(s) (Project Settings > Graphics / Quality, the asset's
+   Renderer List) should now list **Screen Space Ambient Occlusion**.
 2. **Fog per view** — in a 2-player match put one robot at the surface and one deep:
    each view should get its own fog (above / under water). The fog colour and density
    are switched in `RenderPipelineManager.beginCameraRendering`; if Unity sets the
@@ -176,10 +221,11 @@ these could only be checked against Unity's source, not seen. Look at them first
    one Volume per view on layers 24–27. If a view looks ungraded, check its camera's
    Volume Mask (Inspector, while playing) and that the URP Renderer has
    Post-processing ticked.
-4. **Shadows and floor caustics** — the sun casts shadows on High / Medium and carries
-   an animated caustic cookie. They need *Main Light: Cast Shadows* and *Light Cookies*
-   on in the URP asset of the active quality level (Project Settings > Quality; on
-   WebGL usually the "Mobile" asset). The game cannot switch these on from code.
+4. **Shadows and floor caustics** — the sun casts shadows on Ultra / High / Medium and
+   carries an animated caustic cookie. They need *Main Light: Cast Shadows*, *Soft
+   Shadows* and *Light Cookies* on in the URP asset of the active quality level; Set Up
+   Project turns them on in every URP asset the quality levels use (the game cannot
+   switch them on from code).
 5. **Bot thumbnails** in the lobby (240×150, transparent background) are rendered with
    `Camera.Render` into an MSAA RenderTexture. If they show black or empty boxes, the
    render-scale / MSAA path of URP is the suspect (Render/BotThumbs.cs).
@@ -194,8 +240,9 @@ these could only be checked against Unity's source, not seen. Look at them first
    screen renders at full resolution (slower) or too soft.
 9. **Gamepads in the browser** — only pads the browser reports with the "standard"
    mapping become Input System `Gamepad`s; others are ignored by the game.
-10. **Frame rate with 4 players** — four cameras each render shadows, MSAA and post.
-    If WebGL is slow on High, compare with Medium / Low first.
+10. **Frame rate with 4 players** — four cameras each render shadows, MSAA and post
+    (on Ultra also SSAO, depth of field and a supersampled image). If WebGL is slow,
+    compare Ultra with High, then Medium / Low.
 11. **Leaving Play mode** should log nothing. The game puts the URP asset of the
     quality level back when it stops (it plays on a private copy of it); if Project
     Settings > Quality shows a missing pipeline asset after Play, re-assign it.
@@ -233,7 +280,7 @@ unity/
         Boot.cs                      the scene's one component: starts the App, drives it every frame
         App.cs                       menu backdrop, match start / restart / quit / results, split-screen views
                                      and cameras, the fixed 120 Hz physics loop, input, sounds, bubbles
-        ErrorPanel.cs                red box at the bottom of the screen when something throws (screenshot it)
+        ErrorPanel.cs                red box at the bottom of the screen when something throws (screenshot it) — Editor / Development builds only; "could not start" always
         Json.cs, Colors.cs           small helpers (saved settings, "#rrggbb" colours)
       Render/                      3D scene: robots, pool and sea, lights, cameras, split screen (URP)
       UI/                          menus, HUD, controls screen, overlays (uGUI built in code)

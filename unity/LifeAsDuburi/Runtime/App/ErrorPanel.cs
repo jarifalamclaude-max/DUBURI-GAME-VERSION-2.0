@@ -1,10 +1,16 @@
-// A small on-screen error message for playtests (the browser game's "could not start" box and the
-// browser console, in one): every exception logged anywhere (Application.logMessageReceived) shows
-// its message and the first stack line in a red box at the bottom of the screen, with a repeat
-// count, so the team can take a screenshot. Click / tap it to hide it. It has its own canvas
-// (sorting order 1000) so it still shows when the game UI itself broke. The log callback only
-// stores the text; the box is built and updated from Boot's LateUpdate (never inside a log call,
-// which may come from the middle of a canvas rebuild).
+// A small on-screen error message (the browser game's "could not start" box and the browser console, in
+// one). Two uses:
+//  * "could not start" (Boot, when the App cannot be created): always shown, in every build — it is the
+//    only thing on screen then.
+//  * playtests: in the Editor and in Development builds (Debug.isDebugBuild) every exception logged
+//    anywhere (Application.logMessageReceived) and every error the game reports itself ("Life as Duburi:
+//    ... [in <where>]", App / Faults) shows its message, where it happened and a repeat count in a red box
+//    at the bottom of the screen, so the team can take a screenshot. Click / tap it to hide it.
+//    Release builds (what players get) show nothing: the errors only go to the console (the browser's
+//    developer console on WebGL), with the same "[in ...]" location tags.
+// It has its own canvas (sorting order 1000) so it still shows when the game UI itself broke. The log
+// callback only stores the text; the box is built and updated from Boot's LateUpdate (never inside a log
+// call, which may come from the middle of a canvas rebuild).
 
 using System;
 using UnityEngine;
@@ -15,25 +21,40 @@ namespace Duburi.Game
     public sealed class ErrorPanel : IDisposable
     {
         const int MaxChars = 600;
+        const string Prefix = Faults.Prefix;
+
+        /// logged errors show on screen only in the Editor and in Development builds; players (release
+        /// builds) get them in the console only
+        public static bool ShowsLoggedErrors => Application.isEditor || Debug.isDebugBuild;
 
         readonly Transform parent;
+        readonly bool live;
         GameObject go;
         Text text;
         string message;
         int count;
-        bool dirty, broken, disposed;
+        bool dirty, broken, disposed, fatal;
 
         public ErrorPanel(Transform parent)
         {
             this.parent = parent;
-            Application.logMessageReceived += OnLog;
+            live = ShowsLoggedErrors;
+            if (live)
+            {
+                Application.logMessageReceived += OnLog;
+                Faults.Repeated += Repeat;
+            }
         }
 
-        /// the number of errors reported so far
+        /// the number of errors reported so far (0 in release builds, which only log them)
         public int Count => count;
+
+        /// the panel follows the log (Editor / Development build)
+        public bool Live => live;
 
         void OnLog(string condition, string stackTrace, LogType type)
         {
+            if (fatal) return; // "could not start" stays on screen
             // exceptions, asserts, and the errors the game reports itself ("Life as Duburi: ... [in <where>]",
             // followed by the exception text)
             bool ours = type == LogType.Error && condition != null && condition.StartsWith(Prefix, StringComparison.Ordinal);
@@ -54,12 +75,19 @@ namespace Duburi.Game
             catch (Exception) { /* never throw from a log callback */ }
         }
 
-        /// show a message of our own (e.g. "could not start")
-        public void Show(string msg) => Set(msg);
+        /// a message of our own that must be seen in every build ("could not start"); it stays on screen
+        public void Show(string msg)
+        {
+            fatal = true;
+            count = 1;
+            message = Clip(msg);
+            dirty = true;
+        }
 
-        /// the same error again (the App logs a repeating exception only once)
+        /// the same error again (the App and Faults log a repeating exception only once)
         public void Repeat()
         {
+            if (!live || fatal || message == null) return;
             count++;
             dirty = true;
         }
@@ -67,11 +95,11 @@ namespace Duburi.Game
         void Set(string msg)
         {
             count++;
-            message = msg != null && msg.Length > MaxChars ? msg.Substring(0, MaxChars) + "…" : msg;
+            message = Clip(msg);
             dirty = true;
         }
 
-        const string Prefix = "Life as Duburi: ";
+        static string Clip(string msg) => msg != null && msg.Length > MaxChars ? msg.Substring(0, MaxChars) + "…" : msg ?? "";
 
         // the first "at ..." line of an exception's text (none in WebGL builds without stack traces)
         static string FirstAtLine(string text)
@@ -107,8 +135,10 @@ namespace Duburi.Game
             try
             {
                 if (go == null) Build();
-                text.text = "Life as Duburi hit an error" + (count > 1 ? " (" + count + "×)" : "") +
-                            " — please take a screenshot for the team. Click to hide.\n" + message;
+                text.text = fatal
+                    ? message
+                    : "Life as Duburi hit an error" + (count > 1 ? " (" + count + "×)" : "") +
+                      " — please take a screenshot for the team. Click to hide.\n" + message;
                 if (!go.activeSelf) go.SetActive(true);
             }
             catch (Exception)
@@ -154,7 +184,8 @@ namespace Duburi.Game
             button.targetGraphic = bg;
             button.transition = Selectable.Transition.None;
             button.navigation = new Navigation { mode = Navigation.Mode.None };
-            button.onClick.AddListener(() => { if (go != null) go.SetActive(false); });
+            // the "could not start" box stays: it is all there is on screen then
+            button.onClick.AddListener(() => { if (go != null && !fatal) go.SetActive(false); });
 
             var tgo = new GameObject("text", typeof(RectTransform)) { layer = Ui.Layer };
             tgo.transform.SetParent(rt, false);
@@ -176,7 +207,11 @@ namespace Duburi.Game
         {
             if (disposed) return;
             disposed = true;
-            Application.logMessageReceived -= OnLog;
+            if (live)
+            {
+                Application.logMessageReceived -= OnLog;
+                Faults.Repeated -= Repeat;
+            }
             if (go != null) UnityEngine.Object.Destroy(go);
         }
     }

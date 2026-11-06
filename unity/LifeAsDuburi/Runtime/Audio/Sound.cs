@@ -180,9 +180,9 @@ namespace Duburi.Game
 
         public override void Tick(float dt, SoundFrame frame)
         {
-            if (!ok) return;
+            if (!ok || frame == null) return;
             var veh = frame.vehicles;
-            int count = veh.Count;
+            int count = veh != null ? veh.Count : 0;
             if (buf.Length < count * Stride) buf = new float[Mathf.NextPowerOfTwo(count) * Stride];
             int used = 0;
             for (int i = 0; i < count; i++)

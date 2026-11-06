@@ -122,22 +122,27 @@ namespace Duburi.Game
             if (!focused) Down.Clear();
         }
 
+        // an Input System callback (outside the App's frame): an error is reported with its place
         void OnDeviceChange(InputDevice device, InputDeviceChange change)
         {
-            if (!(device is Gamepad pad)) return;
-            switch (change)
+            if (disposed || !(device is Gamepad pad)) return;
+            try
             {
-                case InputDeviceChange.Added:
-                case InputDeviceChange.Reconnected:
-                case InputDeviceChange.Enabled:
-                    Attach(pad);
-                    break;
-                case InputDeviceChange.Removed:
-                case InputDeviceChange.Disconnected:
-                case InputDeviceChange.Disabled:
-                    Detach(pad);
-                    break;
+                switch (change)
+                {
+                    case InputDeviceChange.Added:
+                    case InputDeviceChange.Reconnected:
+                    case InputDeviceChange.Enabled:
+                        Attach(pad);
+                        break;
+                    case InputDeviceChange.Removed:
+                    case InputDeviceChange.Disconnected:
+                    case InputDeviceChange.Disabled:
+                        Detach(pad);
+                        break;
+                }
             }
+            catch (Exception e) { Faults.Report("gamepad " + change, e); }
         }
 
         // give a new pad the lowest free index, like the browser does
@@ -189,7 +194,7 @@ namespace Duburi.Game
         static string PadId(Gamepad pad)
         {
             var d = pad.description;
-            var id = pad.layout + " " + d.manufacturer + " " + d.product;
+            var id = pad.layout + " " + (d.manufacturer ?? "") + " " + (d.product ?? "");
             if (pad is DualShockGamepad) id = "DualShock " + id;
             return id.Trim();
         }

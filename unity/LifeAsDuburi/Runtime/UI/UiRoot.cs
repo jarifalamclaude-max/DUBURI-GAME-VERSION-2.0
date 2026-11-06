@@ -34,9 +34,9 @@ namespace Duburi.Game
         public RectTransform OverlayLayer { get; private set; }
 
         /// canvas size in units
-        public Vector2 Size => Rect.rect.size;
+        public Vector2 Size => Rect != null ? Rect.rect.size : new Vector2(1600, 900);
         /// screen pixels per canvas unit
-        public float Scale => Canvas.scaleFactor > 0 ? Canvas.scaleFactor : 1;
+        public float Scale => Canvas != null && Canvas.scaleFactor > 0 ? Canvas.scaleFactor : 1;
 
         /// the canvas size changed (window resize, rotation); fired from LateUpdate
         public event Action Resized;
@@ -117,6 +117,7 @@ namespace Duburi.Game
         /// screen is wider than tall (wide), else stacked; 3-4 views in quarters; 1 view none
         public void SetSplit(int views, bool wide)
         {
+            if (splitV == null || splitH == null) return;
             splitV.enabled = views > 2 || (views == 2 && wide);
             splitH.enabled = views > 2 || (views == 2 && !wide);
         }
@@ -142,15 +143,29 @@ namespace Duburi.Game
             lastW = w; lastH = h;
         }
 
+        // Update / LateUpdate run outside the App's frame: an error is reported with its place (WebGL
+        // builds have no stack traces) and does not stop the other resize listeners
         void Update()
         {
-            if (Screen.width != lastW || Screen.height != lastH) UpdateReference();
+            if (Scaler == null || (Screen.width == lastW && Screen.height == lastH)) return;
+            try { UpdateReference(); }
+            catch (Exception e) { lastW = Screen.width; lastH = Screen.height; Faults.Report("ui reference size", e); }
         }
 
         void LateUpdate()
         {
+            if (Rect == null) return;
             var s = Rect.rect.size;
-            if (s != lastSize) { lastSize = s; Resized?.Invoke(); }
+            if (s == lastSize) return;
+            lastSize = s;
+            var listeners = Resized;
+            if (listeners == null) return;
+            foreach (var d in listeners.GetInvocationList()) // only when the size changed
+            {
+                var h = (Action)d;
+                try { h(); }
+                catch (Exception e) { Faults.Report("screen resize: " + h.Method.DeclaringType?.Name + "." + h.Method.Name, e); }
+            }
         }
 
         void OnDestroy() { if (Instance == this) Instance = null; }

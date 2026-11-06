@@ -508,7 +508,7 @@ namespace Duburi.Game
             if (border != null) border.color = hot ? borderF : hover ? borderH : borderN;
             if (label != null) label.color = hot ? textF : hover ? textH : textN;
             if (outline != null) outline.enabled = focus;
-            if (group != null && padShift != 0 && hot != shifted)
+            if (group != null && group.padding != null && padShift != 0 && hot != shifted)
             {
                 shifted = hot;
                 if (basePad == null) basePad = new RectOffset(group.padding.left, group.padding.right, group.padding.top, group.padding.bottom);
@@ -553,6 +553,14 @@ namespace Duburi.Game
         }
 
         void Update()
+        {
+            // a MonoBehaviour update outside the App's frame: an error is reported with its place, and the
+            // animation stops instead of throwing every frame
+            try { Step(); }
+            catch (Exception e) { Faults.Report("ui animation '" + name + "'", e); enabled = false; }
+        }
+
+        void Step()
         {
             float t = Time.unscaledTime - t0;
             if (move != null && !baseSet) { basePos = move.anchoredPosition; baseSet = true; }

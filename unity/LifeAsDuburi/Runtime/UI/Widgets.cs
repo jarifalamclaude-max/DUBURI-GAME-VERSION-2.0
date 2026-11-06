@@ -98,13 +98,23 @@ namespace Duburi.Game
         static Color White(float a) => Css.White(a);
 
         // ---------------------------------------------------------------- buttons
-        static Button MakeButton(RectTransform rt, Graphic target, Action onClick)
+        // a click runs outside the App's frame (uGUI event): an error is reported with the button's name
+        // (WebGL builds have no stack traces)
+        static Button MakeButton(RectTransform rt, Graphic target, Action onClick, string what = null)
         {
             var b = rt.gameObject.AddComponent<Button>();
             b.transition = Selectable.Transition.None;
             b.navigation = new Navigation { mode = Navigation.Mode.None };
             b.targetGraphic = target;
-            if (onClick != null) b.onClick.AddListener(() => onClick());
+            if (onClick != null)
+            {
+                string where = "click '" + (what ?? rt.name) + "'";
+                b.onClick.AddListener(() =>
+                {
+                    try { onClick(); }
+                    catch (Exception e) { Faults.Report(where, e); }
+                });
+            }
             return b;
         }
 
@@ -130,7 +140,7 @@ namespace Duburi.Game
             skin.fillF = skin.fillN;
             skin.outline = FocusOutline(rt, 8);
             skin.Apply();
-            return MakeButton(rt, fill, onClick);
+            return MakeButton(rt, fill, onClick, label);
         }
 
         /// .mi pause menu item: <b>label</b><small>sub</small>; cls "", "primary", "warn", "bad"
@@ -151,7 +161,7 @@ namespace Duburi.Game
             skin.group = v;
             skin.padShift = 6;
             skin.Apply();
-            return MakeButton(rt, hit, onClick);
+            return MakeButton(rt, hit, onClick, label);
         }
 
         /// .bind: label on the left, the key in a kbd on the right; preset rows have <b>label</b><small>desc</small>
@@ -177,7 +187,7 @@ namespace Duburi.Game
             skin.Init(fill, border, null, White(0.04f), White(0.1f), Css.line, Css.acc);
             skin.hoverLikeFocus = true;
             skin.Apply();
-            return MakeButton(rt, fill, onClick);
+            return MakeButton(rt, fill, onClick, label);
         }
 
         /// .bind kbd { min-width: 70px; text-align: center; font-size: 13px }
@@ -202,7 +212,7 @@ namespace Duburi.Game
             skin.Init(fill, border, null, fill.color, fill.color, Css.line, Css.line);
             skin.outline = FocusOutline(rt, 18);
             skin.Apply();
-            return MakeButton(rt, fill, onClick);
+            return MakeButton(rt, fill, onClick, label);
         }
 
         /// .hb HUD button (quit: .hb.quit)
@@ -222,7 +232,7 @@ namespace Duburi.Game
                 var graphics = line.GetComponentsInChildren<Graphic>();
                 rt.gameObject.AddComponent<HoverTint>().Init(skin, graphics, tc, Color.white);
             }
-            return MakeButton(rt, fill, onClick);
+            return MakeButton(rt, fill, onClick, label);
         }
 
         /// .arrow ‹ ›
@@ -236,7 +246,7 @@ namespace Duburi.Game
             Stretch(t.rectTransform, 0, 0, 0, 3);
             var skin = rt.gameObject.AddComponent<Skin>();
             skin.Init(fill, border, null, new Color(1, 1, 1, 0), White(0.1f), Css.line, Css.line);
-            return MakeButton(rt, fill, onClick);
+            return MakeButton(rt, fill, onClick, label);
         }
 
         /// .sw colour swatch (on: white border + dark ring)
@@ -258,7 +268,7 @@ namespace Duburi.Game
             HBox(rt, Pad(0, 0, 0, 6), 0, TextAnchor.MiddleLeft);
             var t = Label(rt, label, 12, Css.acc, UiFont.Regular, TextAnchor.MiddleLeft, false);
             Rule(t.transform, Css.acc, 1, 0.12f);
-            return MakeButton(rt, hit, onClick);
+            return MakeButton(rt, hit, onClick, label);
         }
 
         // ---------------------------------------------------------------- form controls
@@ -508,7 +518,11 @@ namespace Duburi.Game
         Graphic[] graphics;
         Color normal, hover;
         public void Init(Skin s, Graphic[] g, Color n, Color h) { graphics = g; normal = n; hover = h; }
-        void Set(Color c) { foreach (var g in graphics) if (g != null) g.color = c; }
+        void Set(Color c)
+        {
+            if (graphics == null) return;
+            for (int i = 0; i < graphics.Length; i++) if (graphics[i] != null) graphics[i].color = c;
+        }
         public void OnPointerEnter(UnityEngine.EventSystems.PointerEventData e) => Set(hover);
         public void OnPointerExit(UnityEngine.EventSystems.PointerEventData e) => Set(normal);
     }

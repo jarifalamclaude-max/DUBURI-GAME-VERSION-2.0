@@ -33,9 +33,9 @@ effects come from `Resources/Duburi/PostProfile` (both made by **Life as Duburi 
 |---|---|---|
 | `Scenery.cs` | `scenery.js` | water, floor, walls / seabed, life, particles, god rays, buoys, banners; caustics as an animated sun cookie (`CausticCookie`); `WaveState`, `ClearZone` |
 | `Course3D.cs` | `course3d.js` | gate, slalom, bin, board, octagon, pingers, dock |
-| `Bots3D.cs` | `bots3d.js` | `Bots3D.CreateBotMesh` → `BotMesh`, `CreateItemMesh`, `DisposeObject`, `MergeStatic`, `BotState` |
+| `Bots3D.cs`, `DuburiModel.cs` | `bots3d.js` | `Bots3D.CreateBotMesh` → `BotMesh`, `CreateItemMesh`, `DisposeObject`, `MergeStatic`, `BotState`; the DUBURI model built from the team's CAD (octagonal hull, brass hatch and porthole, red latches, bracket wings, 8 × T200, powder-coated frame, torpedo launcher) |
 | `Art.cs` | `art.js` | handbook prints, logo, HUD icons, `DrawAnimal` |
-| `Graphics3D.cs` | `graphics.js` | `MakeEnvironment` (reflection probe + diffuse ambient), `SetupShadows`, `CastShadows`, `Ambient`, `EnvLight` |
+| `Graphics3D.cs` | `graphics.js` | `MakeEnvironment` (reflection probe + diffuse ambient), `SetupShadows`, `CastShadows`, `Ambient`, `EnvLight`, `LiveReflection` (Ultra) |
 | `GraphicsQuality.cs` | `graphics.js` QUALITY + `loadQuality/saveQuality` | levels, PlayerPrefs `life-as-duburi-quality`, URP asset settings (render scale, MSAA, shadows) |
 | `Bubbles.cs` | `bubbles.js` | ring-buffer bubble pool, one world-space ParticleSystem |
 | `Post.cs` | `post.js` | per-view Volume (Bloom, ACES, ColorAdjustments, Vignette) + under-water grade |
@@ -43,7 +43,7 @@ effects come from `Resources/Duburi/PostProfile` (both made by **Life as Duburi 
 | `BotThumbs.cs` | `main.js` thumb / renderThumb | cached 240×150 bot pictures (contract) |
 | `RenderHooks.cs` | — | per-camera switches at `RenderPipelineManager.begin/endCameraRendering` |
 | `Space.cs` | — | coordinate conversions, three.js rotation helpers |
-| `Node.cs`, `MeshBuilder.cs` (`Geo`, `Shape2`, `Earcut`), `Mats.cs` (`Mat3`, `Mats`, `Palette`, `Owned`), `Canvas2D.cs` (`Canvas2D`, `StrokeFont`) | three.js | scene graph, geometry generators, materials, 2D canvas for textures |
+| `Node.cs`, `MeshBuilder.cs` (`Geo`, `Shape2`, `Earcut`) (+ `Geo.Prism` / `Geo.Tube` / `Geo.Faceted`), `Mats.cs` (`Mat3`, `Mats`, `Palette`, `Owned`), `Canvas2D.cs` (`Canvas2D`, `StrokeFont`) | three.js | scene graph, geometry generators, materials, 2D canvas for textures |
 
 ## Setting up (App)
 
@@ -142,14 +142,16 @@ Cameras: `ViewCamera.Dispose()`; `Enabled = false` for views that are not drawn.
 ### `Graphics3D`, `Ambient`, `EnvLight` (graphics.js)
 `Graphics3D.MakeEnvironment(ScenarioLook look, float intensity, Vector3 unityCenter, float size)` → `EnvLight`
 (`cube`, `go` = ReflectionProbe, `up/side/down` diffuse, `Dispose()`);
-`Graphics3D.SetupShadows(Scenery, int size, Arena)` → sun or null; `Graphics3D.CastShadows(GameObject, cast = true, receive = true)`;
+`Graphics3D.SetupShadows(Scenery, int size, Arena, bool hq = false)` → sun or null (hq = 7×7 soft shadows);
+`Graphics3D.MakeLiveReflection(look, arena, pool)` → `LiveReflection` (Ultra: real-time box-projected probe; `Create`, `Tick()` once per frame, `Ready`, `Dispose()`, `go`, `probe`); `Graphics3D.CastShadows(GameObject, cast = true, receive = true)`;
 `Ambient.SetHemisphere(sky, ground, intensity)`, `SetEnvironment(EnvLight)`, `Apply()`, `Compute(...)`, `Set(...)`, `Environment`.
 
 ### `GraphicsQuality` (graphics.js QUALITY; Render contract)
-`Order` (`{"high","medium","low"}`), `Current`, `Spec` (`QualitySpec {label, post, shadows, pixelRatio, bubbles}`),
+`Order` (`{"ultra","high","medium","low"}`), `Current`, `Spec` (`QualitySpec {label, post, shadows, pixelRatio, bubbles, cascades, msaa, supersample, ssao, reflections, hqShadows, anisotropic, hiResTextures}`; `post` may be `"ultra"`),
 `QUALITY`, `Label(id)`, `Set(id)` (save + apply + `Changed`), `Next()`, `Load()`, `Save(id)`, `Apply()`,
-`event Action<string> Changed`, `Asset()` (a private copy of the URP asset), `RenderScale`, `DevicePixelRatio()`, `ShadowDistance`.
-MSAA: 4× on High and Low (Low = the JS canvas antialias), none on Medium.
+`event Action<string> Changed`, `Asset()` (a private copy of the URP asset), `RenderScale`, `DevicePixelRatio()`, `ShadowDistance`,
+`Refresh()` (window resizes; `Views.DrawView` calls it), `RenderScaleFor(spec, w, h)`, `UseRealtimeReflectionProbes()`, `MaxInternalWidth` / `MaxInternalHeight`, `Restore()`.
+MSAA: 4× on Ultra, High and Low, none on Medium; Ultra supersamples up to 2× (internal ≤ 3840×2160).
 
 ### `Art` (art.js; Render contract)
 `Logo`, `Image(key)` (`imageTexture`), `AnimalTexture(animal, where = "gate")`, `AnimalIcon(animal)`,
@@ -175,22 +177,22 @@ Do not call it from inside a camera render callback.
 ### `Post` (post.js `createPost`)
 | member | |
 |---|---|
-| `new Post()` / `new Post(string quality, bool followQuality = false)` | `"high"`, `"low"`, `null` (= no post: ACES + exposure only) |
+| `new Post()` / `new Post(string quality, bool followQuality = false)` | `"ultra"`, `"high"`, `"low"`, `null` (= no post: ACES + exposure only) |
 | `void Apply(Camera cam, int view, bool underwater, float depth, Color waterColorLinear, float turbidity)` | `post.render(...)` for one view (`Views.DrawView` calls it) |
-| `void SetQuality(string)`, `string Quality`, `Settings settings {bloom, threshold, vignette, grain, absorption}` | `setQuality`, `quality`, `settings` |
+| `void SetQuality(string)`, `string Quality`, `Settings settings {bloom, threshold, vignette, grain, absorption, dof}` (`dof`: Ultra's under-water distance-blur multiplier, 0 = off) | `setQuality`, `quality`, `settings` |
 | `VolumeProfile Profile(int view)`, `static Color Absorption(depth, turb, water, k)`, `static float VignetteIntensity(v)` | |
 | `void Dispose()` | `dispose` |
-| `FirstLayer = 24`, `MaxViews = 4`, `ProfilePath = "Duburi/PostProfile"` | |
+| `FirstLayer = 24`, `MaxViews = 4`, `ProfilePath = "Duburi/PostProfile"`, `UltraProfilePath = "Duburi/PostProfileUltra"` | |
 
 ### `Views.cs`
 | member | |
 |---|---|
-| `SceneExtras.Create(Scenery, ScenarioLook, Arena)` → `Env`, `Sun`, `Bubbles`, `Look`, `WaterColor` (linear), `Turbidity`; `ApplyQuality()` (also automatic on `GraphicsQuality.Changed`), `Dispose()` | `sceneExtras` |
+| `SceneExtras.Create(Scenery, ScenarioLook, Arena)` → `Env`, `Sun`, `Bubbles`, `Reflection` (Ultra only), `Look`, `WaterColor` (linear), `Turbidity`; `ApplyQuality()` (also automatic on `GraphicsQuality.Changed`), `Tick()`, `Dispose()` | `sceneExtras` |
 | `new ContactShadow(Transform world, BotDesign)`, `Update(x, y, z, floor)` (NED, m), `Visible`, `GameObject`, `Dispose()` | the per-bot `shadow` mesh |
 | `new ViewCamera(string name, float fov, float near, float far, int view = 0)`, `camera`, `data`, `view` | `new THREE.PerspectiveCamera(fov, 1, near, far)` |
 | `ViewCamera.SetRect(x, y, w, h, screenHeight = 0)`, `Rect` | `v.rect = rect; cam.aspect = w / h` (top-left origin, pixels) |
 | `ViewCamera.Position`, `Quaternion` (three space), `SetPose(p, q)`, `LookAt(target[, up])`, `Fov`, `Enabled`, `Dispose()` | `cam.position`, `cam.quaternion`, `cam.lookAt`, `cam.fov` |
-| `Views.DrawView(ViewCamera, Scenery, SceneExtras, Post, Env env)` | `drawView(cam, rect, time)` |
+| `Views.DrawView(ViewCamera, Scenery, SceneExtras, Post, Env env)` (also `GraphicsQuality.Refresh()` and `extras.Tick()`) | `drawView(cam, rect, time)` |
 | `Views.HideFor(ViewCamera, BotMesh own)` | `own.visible = false` around the onboard view's render |
 | `Views.PlaceItem(GameObject itemMesh, Item it)` | syncMeshes' item pose |
 | `Views.NedQuat(Quat)` | `nedQuat` |

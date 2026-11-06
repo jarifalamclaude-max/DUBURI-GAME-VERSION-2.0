@@ -277,7 +277,7 @@ namespace Duburi.Game
         /// pixels (0: SetViewportHeight or the camera's pixel height).
         public void ApplyForCamera(Camera cam, float viewportPx = 0)
         {
-            if (cam == null) return;
+            if (cam == null || mat == null) return;
             RenderHooks.State(cam); // make sure the camera gets the per-camera switch
             float h = viewportPx > 0 ? viewportPx : manualH > 0 ? manualH : cam.pixelHeight;
             if (!(h > 0)) h = 800;
@@ -297,7 +297,7 @@ namespace Duburi.Game
         // the fog this camera sees; 2.5..96 px points
         void OnBeginCamera(Camera cam, RenderHooks.CamState st)
         {
-            if (mat == null) return;
+            if (mat == null || pr == null || cam == null || st == null) return;
             Vector3 c = Space.FromUnity(cam.transform.position);
             bool under = c.y < waveFn(c.x, c.z);
             Mats.SetQueue(mat, baseQueue + (under ? 3 : 1));
@@ -312,6 +312,7 @@ namespace Duburi.Game
 
         void SetSizeClamp(float h)
         {
+            if (pr == null) return;
             if (!(h > 0)) h = 800;
             float mn = MIN_PX / h, mx = MAX_PX / h;
             if (pr.minParticleSize != mn) pr.minParticleSize = mn;
@@ -367,7 +368,7 @@ namespace Duburi.Game
             if (go != null) UnityEngine.Object.Destroy(go);
             if (mat != null) UnityEngine.Object.Destroy(mat);
             if (tex != null) UnityEngine.Object.Destroy(tex);
-            go = null; ps = null; mat = null; tex = null;
+            go = null; ps = null; pr = null; mat = null; tex = null;
             alive = 0; hi = -1;
         }
     }

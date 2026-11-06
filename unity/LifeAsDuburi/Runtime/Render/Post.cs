@@ -20,6 +20,13 @@
 // counterpart (the port has none). Quality: "high" (3 bloom levels + 4x MSAA from GraphicsQuality),
 // "low" (1 bloom level), null = no post (the JS renders straight to the canvas: tone mapping and
 // exposure only, which URP also does in its post pass — so the stack stays on with every effect off).
+//
+// "ultra" (beyond the browser game) clones Resources/Duburi/PostProfileUltra instead: the same four
+// effects plus DepthOfField, with bloom's high-quality (bicubic) filtering at half resolution and 4
+// levels, and under water a subtle Gaussian distance blur that starts where the water's fog begins to
+// matter. URP keeps only the post shader variants it finds in VolumeProfile assets, so HQ bloom and
+// depth of field are used only when that profile (made by Set Up Project) loads; without it Ultra
+// falls back to the "high" grade with a warning.
 
 using System;
 using UnityEngine;
@@ -34,6 +41,8 @@ namespace Duburi.Game
         public const int FirstLayer = 24;
         public const int MaxViews = 4;
         public const string ProfilePath = "Duburi/PostProfile";
+        /// PostProfile + DepthOfField, HQ bloom filtering (Ultra only)
+        public const string UltraProfilePath = "Duburi/PostProfileUltra";
 
         /// tunables (multipliers the game may tweak at run time), like the JS settings
         public sealed class Settings
@@ -43,12 +52,15 @@ namespace Duburi.Game
             public float vignette = 1;
             public float grain = 1;       // > 0: dithering on
             public float absorption = 1;
+            public float dof = 1;         // Ultra's under-water distance blur (0 = off)
         }
 
         // bloom layout per quality (PRESETS): level weights, URP mip count and scatter
         sealed class Preset { public float[] weights; public int iterations; public float scatter; }
         static readonly Preset High = new Preset { weights = new[] { 0.4f, 0.35f, 0.3f }, iterations = 3, scatter = 0.6f };
         static readonly Preset Low = new Preset { weights = new[] { 1.0f, 0f, 0f }, iterations = 2, scatter = 0f };
+        // Ultra: the High weights over 4 half-resolution levels with bicubic upsampling
+        static readonly Preset Ultra = new Preset { weights = new[] { 0.4f, 0.35f, 0.3f }, iterations = 4, scatter = 0.6f };
 
         static readonly float Exposure = Mathf.Log(1.05f, 2f); // renderer.toneMappingExposure = 1.05
         const float VignetteSmooth = 0.4f;                       // URP smoothness: pow(.., 5 * 0.4)
@@ -63,18 +75,19 @@ namespace Duburi.Game
             public Tonemapping tone;
             public ColorAdjustments color;
             public Vignette vignette;
+            public DepthOfField dof;      // Ultra profile only
+            public bool ultra;            // the profile is a clone of PostProfileUltra
             public Camera cam;
             public UniversalAdditionalCameraData data;
         }
 
         readonly View[] views = new View[MaxViews];
         string quality;
-        Preset P;
         readonly bool follow;
         public readonly Settings settings = new Settings();
 
-        static VolumeProfile template;
-        static bool warned;
+        static VolumeProfile template, ultraTemplate;
+        static bool warned, warnedUltra, ultraLoaded;
 
         /// createPost(renderer, { quality }): "high" | "low" | null (no post). With followQuality the
         /// level follows GraphicsQuality.Set (the pause menu's Graphics button) on its own.
@@ -90,55 +103,98 @@ namespace Duburi.Game
 
         void OnQualityChanged(string id) => SetQuality(GraphicsQuality.QUALITY[id].post);
 
-        /// "high" | "low" | null
+        /// "ultra" | "high" | "low" | null
         public string Quality => quality;
 
         /// setQuality(q)
         public void SetQuality(string q)
         {
-            quality = q == null ? null : q == "low" ? "low" : "high";
-            P = quality == "low" ? Low : High;
+            quality = q == null ? null : q == "low" ? "low" : q == "ultra" ? "ultra" : "high";
         }
 
-        /// The view's Volume (layer FirstLayer + view), created on first use.
+        /// The view's Volume (layer FirstLayer + view), created on first use; its profile follows the
+        /// quality (PostProfileUltra on Ultra when Set Up Project made it, PostProfile otherwise).
         View Get(int view)
         {
             view = Mathf.Clamp(view, 0, MaxViews - 1);
+            bool wantUltra = quality == "ultra" && UltraTemplate() != null;
             var v = views[view];
-            if (v != null && v.go != null) return v;
+            if (v != null && v.go != null)
+            {
+                if (v.ultra != wantUltra) BuildProfile(v, wantUltra);
+                return v;
+            }
             v = new View();
             v.go = new GameObject("post view " + (view + 1)) { layer = FirstLayer + view };
-            v.profile = CloneProfile();
+            v.volume = v.go.AddComponent<Volume>();
+            v.volume.isGlobal = true;
+            v.volume.priority = 1;
+            v.volume.weight = 1;
+            BuildProfile(v, wantUltra);
+            views[view] = v;
+            return v;
+        }
+
+        /// (re)creates the view's private profile from the template of its kind
+        static void BuildProfile(View v, bool ultra)
+        {
+            DestroyProfile(v.profile);
+            v.ultra = ultra;
+            v.profile = CloneProfile(ultra ? ultraTemplate : null);
             v.bloom = Component<Bloom>(v.profile);
             v.tone = Component<Tonemapping>(v.profile);
             v.color = Component<ColorAdjustments>(v.profile);
             v.vignette = Component<Vignette>(v.profile);
             v.tone.mode.Override(TonemappingMode.ACES);
-            v.bloom.downscale.Override(BloomDownscaleMode.Quarter);
+            // Ultra: half-resolution bloom with bicubic upsampling (its variant is kept by PostProfileUltra)
+            v.bloom.downscale.Override(ultra ? BloomDownscaleMode.Half : BloomDownscaleMode.Quarter);
+            v.bloom.highQualityFiltering.Override(ultra);
             v.bloom.tint.Override(Color.white);
             v.color.hueShift.Override(0f);
             v.vignette.color.Override(Color.black);
             v.vignette.center.Override(new Vector2(0.5f, 0.5f));
             v.vignette.rounded.Override(false);
             v.vignette.smoothness.Override(VignetteSmooth);
-            v.volume = v.go.AddComponent<Volume>();
-            v.volume.isGlobal = true;
-            v.volume.priority = 1;
-            v.volume.weight = 1;
+            v.dof = null;
+            if (ultra)
+            {
+                v.dof = Component<DepthOfField>(v.profile);
+                v.dof.mode.Override(DepthOfFieldMode.Off);
+                v.dof.highQualitySampling.Override(true);
+            }
             v.volume.sharedProfile = v.profile;
-            views[view] = v;
-            return v;
         }
 
-        /// Object.Instantiate(PostProfile) with its components copied too (Instantiate alone would
-        /// share the template's components between all views).
-        static VolumeProfile CloneProfile()
+        /// Resources/Duburi/PostProfileUltra, or null (warned once) when Set Up Project has not made it yet
+        static VolumeProfile UltraTemplate()
         {
-            if (template == null) template = Resources.Load<VolumeProfile>(ProfilePath);
-            VolumeProfile p;
-            if (template != null)
+            if (!ultraLoaded)
             {
-                p = UnityEngine.Object.Instantiate(template);
+                ultraLoaded = true;
+                ultraTemplate = Resources.Load<VolumeProfile>(UltraProfilePath);
+            }
+            if (ultraTemplate == null && !warnedUltra)
+            {
+                warnedUltra = true;
+                Debug.LogWarning("Life as Duburi: Resources/" + UltraProfilePath + " is missing — Ultra runs without depth of field and " +
+                                 "high-quality bloom. Run Life as Duburi > Set Up Project again (needed after every update of the game files).");
+            }
+            return ultraTemplate;
+        }
+
+        /// Object.Instantiate(template) with its components copied too (Instantiate alone would share the
+        /// template's components between all views). source null = PostProfile.
+        static VolumeProfile CloneProfile(VolumeProfile source)
+        {
+            if (source == null)
+            {
+                if (template == null) template = Resources.Load<VolumeProfile>(ProfilePath);
+                source = template;
+            }
+            VolumeProfile p;
+            if (source != null)
+            {
+                p = UnityEngine.Object.Instantiate(source);
                 for (int i = 0; i < p.components.Count; i++)
                     if (p.components[i] != null) p.components[i] = UnityEngine.Object.Instantiate(p.components[i]);
             }
@@ -189,6 +245,22 @@ namespace Duburi.Game
             float dep = under ? Mathf.Max(0, depth) : 0;
             float turb = Mathf.Clamp01(turbidity);
 
+            if (v.dof != null)
+            {
+                // Ultra, under water: a subtle distance blur that starts where the fog begins to matter
+                // (fogDensity back from the turbidity: 0.02 + 0.05 turb), never on the vehicles near the camera
+                if (under && quality != null && settings.dof > 0)
+                {
+                    float fd = 0.02f + 0.05f * turb;
+                    float start = Mathf.Max(8f, 0.45f / fd);
+                    v.dof.mode.Override(DepthOfFieldMode.Gaussian);
+                    v.dof.gaussianStart.Override(start);
+                    v.dof.gaussianEnd.Override(start + 0.9f / fd);
+                    v.dof.gaussianMaxRadius.Override(Mathf.Clamp(0.6f * settings.dof, 0.5f, 1.5f));
+                }
+                else if (v.dof.mode.value != DepthOfFieldMode.Off) v.dof.mode.Override(DepthOfFieldMode.Off);
+            }
+
             if (quality == null)
             {
                 // r.render(scene, cam): the renderer's ACES tone mapping and exposure only
@@ -202,6 +274,7 @@ namespace Duburi.Game
             }
 
             // bloom: bright pass (soft knee = threshold / 2, as URP does) and the blur levels
+            var P = v.ultra ? Ultra : quality == "low" ? Low : High;
             v.bloom.active = true;
             float thr = (under ? 0.85f : 1.0f) * settings.threshold;
             v.bloom.threshold.Override(Mathf.LinearToGammaSpace(Mathf.Max(0, thr))); // URP takes it in gamma
@@ -260,13 +333,25 @@ namespace Duburi.Game
                 var v = views[i];
                 if (v == null) continue;
                 if (v.go != null) UnityEngine.Object.Destroy(v.go);
-                if (v.profile != null)
-                {
-                    foreach (var c in v.profile.components) if (c != null) UnityEngine.Object.Destroy(c);
-                    UnityEngine.Object.Destroy(v.profile);
-                }
+                DestroyProfile(v.profile);
                 views[i] = null;
             }
+        }
+
+        static void DestroyProfile(VolumeProfile p)
+        {
+            if (p == null) return;
+            foreach (var c in p.components) if (c != null) UnityEngine.Object.Destroy(c);
+            UnityEngine.Object.Destroy(p);
+        }
+
+        // Enter Play Mode without a domain reload keeps statics: look for the templates again (Set Up
+        // Project may have made them since).
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics()
+        {
+            template = null; ultraTemplate = null;
+            warned = false; warnedUltra = false; ultraLoaded = false;
         }
     }
 }

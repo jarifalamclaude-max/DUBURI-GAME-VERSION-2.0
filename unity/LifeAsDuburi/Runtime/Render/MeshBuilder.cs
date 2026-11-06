@@ -137,6 +137,16 @@ namespace Duburi.Game
             return this;
         }
 
+        /// Flat shading: a non-indexed copy where every triangle has its own vertices and face normal
+        /// (three's toNonIndexed() + computeVertexNormals()). Use for machined, hard-edged parts.
+        public Geo Faceted()
+        {
+            var g = ToNonIndexed();
+            g.ComputeVertexNormals();
+            g.EnsureUV();
+            return g;
+        }
+
         public Geo NormalizeNormals()
         {
             for (int i = 0; i < nrm.Count; i++) nrm[i] = Norm(nrm[i]);
@@ -428,6 +438,29 @@ namespace Duburi.Game
                     else { g.idx.Add(i + 1); g.idx.Add(i); g.idx.Add(c); }
                 }
             }
+        }
+
+        /// Regular n-sided prism around +Y, centred, with flat (faceted) sides and caps. 'apothem' is the
+        /// centre-to-face distance; one face is centred on +Z (for n = 8 also on ±X and the diagonals).
+        public static Geo Prism(int sides, float apothem, float height, bool openEnded = false)
+        {
+            sides = Math.Max(3, sides);
+            float r = apothem / Mathf.Cos(Mathf.PI / sides);
+            return Cylinder(r, r, height, sides, 1, openEnded, Mathf.PI / sides).Faceted();
+        }
+
+        /// Thick-walled tube around +Y, centred (a ring / flange / bushing): outer and inner walls plus
+        /// flat annular ends, with hard edges between them.
+        public static Geo Tube(float innerRadius, float outerRadius, float height, int radialSegments = 32)
+        {
+            float h = height / 2;
+            return Merge(new[]
+            {
+                Cylinder(outerRadius, outerRadius, height, radialSegments, 1, true),
+                Cylinder(innerRadius, innerRadius, height, radialSegments, 1, true).Flipped(),
+                Ring(innerRadius, outerRadius, radialSegments).RotateX(-Mathf.PI / 2).Translate(0, h, 0),
+                Ring(innerRadius, outerRadius, radialSegments).RotateX(Mathf.PI / 2).Translate(0, -h, 0),
+            });
         }
 
         /// ConeGeometry(radius, height, radialSegments, heightSegments, openEnded, thetaStart, thetaLength)

@@ -101,7 +101,7 @@ namespace Duburi.Game
         }
     }
 
-    public static class Bots3D
+    public static partial class Bots3D
     {
         const float PI = Mathf.PI;
         static readonly Vector3 Z_AXIS = new Vector3(0, 0, 1);
@@ -125,6 +125,7 @@ namespace Duburi.Game
             public readonly Dictionary<string, Mat3> M = new Dictionary<string, Mat3>();
             readonly Dictionary<string, Geo> geos = new Dictionary<string, Geo>();
             public Color color;   // linear
+            public string hex;    // the player colour as given ("#rrggbb"), for payload items
             public Geo Geo(string key, Func<Geo> make)
             {
                 if (!geos.TryGetValue(key, out var g)) { g = make(); geos[key] = g; }
@@ -135,7 +136,7 @@ namespace Duburi.Game
         static Ctx MakeCtx(string color)
         {
             Color c = Colors.Hex(color).linear;
-            var ctx = new Ctx { color = c };
+            var ctx = new Ctx { color = c, hex = color };
             var M = ctx.M;
             M["team"] = Std(c, 0.1f, 0.45f);
             M["teamDark"] = Std(c * 0.42f, 0.1f, 0.6f);
@@ -450,81 +451,10 @@ namespace Duburi.Game
         sealed class Spec
         {
             public List<Node> props;
-            public SensorSpec sensors;
+            public SensorSpec sensors;     // null: the model builds its own cameras
             public GripSpec grip;
             public TorpSpec torp;
-        }
-
-        static Spec BuildDuburi(Ctx ctx, Node root, BotDesign d, Texture2D tex)
-        {
-            var M = ctx.M;
-            // side plates (black HDPE) with chamfered top corners and lightening holes
-            float hx = 0.22f, hy = 0.12f, c = 0.05f, r = 0.02f, t = 0.012f, py = 0.165f;
-            var plateGeo = ctx.Geo("plate", () =>
-            {
-                var s = new Shape2();
-                s.MoveTo(-hx + r, -hy); s.LineTo(hx - r, -hy); s.QuadraticCurveTo(hx, -hy, hx, -hy + r);
-                s.LineTo(hx, hy - c); s.LineTo(hx - c, hy); s.LineTo(-hx + c, hy); s.LineTo(-hx, hy - c);
-                s.LineTo(-hx, -hy + r); s.QuadraticCurveTo(-hx, -hy, -hx + r, -hy);
-                foreach (float x in new[] { -0.13f, 0f, 0.13f }) { var h = new Path2(); h.Absarc(x, -0.075, 0.02, 0, 2 * Math.PI, true); s.holes.Add(h); }
-                return Geo.Extrude(s, new ExtrudeOptions { depth = t, bevelEnabled = false, curveSegments = 5 })
-                    .Translate(0, 0, -t / 2).RotateY(PI / 2);   // shape x -> forward (-Z), extrude -> X
-            });
-            foreach (float side in new[] { -1f, 1f })
-            {
-                var p = Mesh(plateGeo, M["black"], side > 0 ? "plate_right" : "plate_left");
-                p.position = new Vector3(side * py, 0, 0); root.Add(p);
-                if (tex != null)
-                {
-                    // outer face; rotY=+90deg on the right / -90deg on the left keeps text unmirrored
-                    var l = LogoPlane(ctx, tex, 0.3f, side * PI / 2);
-                    l.position = new Vector3(side * (py + t / 2 + 0.0008f), 0.012f, 0);
-                    root.Add(l);
-                }
-            }
-            // cross bars
-            var bar = ctx.Geo("bar", () => Geo.Box(2 * py, 0.02f, 0.02f));
-            foreach (var (x, z) in new[] { (0.2, 0.055), (-0.2, 0.11), (0.19, 0.11), (-0.2, -0.1) }) Add(root, Mesh(bar, M["black"]), x, 0, z);
-
-            // main electronics tube: clear acrylic, dome front, alu end caps
-            float tz = -0.015f, tr = 0.057f;
-            Add(root, Mesh(CylZ(tr, tr, 0.3f, 24, true), M["acrylic"], "main_tube"), 0, 0, tz);
-            var dome = Mesh(Geo.Sphere(tr, 20, 8, 0, 2 * PI, 0, PI / 2).RotateX(-PI / 2), M["acrylic"], "dome");
-            Add(root, dome, 0.15, 0, tz);
-            var flange = ctx.Geo("flange", () => CylZ(tr + 0.005f, tr + 0.005f, 0.016f, 24));
-            Add(root, Mesh(flange, M["alu"]), 0.15, 0, tz);
-            Add(root, Mesh(flange, M["alu"]), -0.155, 0, tz);
-            var pen = ctx.Geo("pen", () => CylZ(0.006f, 0.006f, 0.02f, 8));
-            for (int k = 0; k < 6; k++)
-            {
-                double a = k / 6.0 * 2 * Math.PI;
-                Add(root, Mesh(pen, M["black"]), -0.17, Math.Cos(a) * 0.035, tz + Math.Sin(a) * 0.035);
-            }
-            // electronics inside
-            Add(root, Mesh(Geo.Box(0.08f, 0.004f, 0.24f), M["pcb"]), 0, 0, tz + 0.012);
-            Add(root, Mesh(Geo.Box(0.045f, 0.016f, 0.07f), M["chip"]), 0.05, 0, tz + 0.002);
-            Add(root, Mesh(Geo.Box(0.055f, 0.018f, 0.085f), M["pcb"]), -0.06, 0, tz + 0.001);
-            Add(root, Mesh(Geo.Box(0.03f, 0.012f, 0.03f), M["blue"]), -0.06, 0.012, tz - 0.012);
-            Add(root, Mesh(Geo.Box(0.06f, 0.012f, 0.05f), M["chip"]), 0.02, 0, tz + 0.025);
-            Add(root, Mesh(Geo.Box(0.03f, 0.03f, 0.02f), M["plastic"]), 0.135, 0, tz); // camera tilt mount
-
-            // battery tube below
-            Add(root, Mesh(CylZ(0.038f, 0.038f, 0.24f, 20), M["alu"], "battery_tube"), 0, 0, 0.08);
-            var bcap = ctx.Geo("bcap", () => CylZ(0.041f, 0.041f, 0.016f, 20));
-            Add(root, Mesh(bcap, M["black"]), 0.12, 0, 0.08);
-            Add(root, Mesh(bcap, M["black"]), -0.12, 0, 0.08);
-
-            // buoyancy foam on top: two blocks leaving a channel over the tube
-            var foam = ctx.Geo("foam", () => Geo.Box(0.11f, 0.055f, 0.4f));
-            foreach (double y in new[] { -0.097, 0.097 }) Add(root, Mesh(foam, M["foam"], "foam"), 0, y, -0.1025);
-
-            return new Spec
-            {
-                props = AddThrusters(ctx, root, d),
-                sensors = new SensorSpec { cam = B(0.17, 0, tz), camR = 0.013f, leds = new[] { B(0.215, 0.105, 0.04), B(0.215, -0.105, 0.04) }, down = B(0.14, 0, 0.125) },
-                grip = new GripSpec { s = 1.2f, arm = 0.08f, post = 0.03f },
-                torp = new TorpSpec { layout = 'v', off = B(0.05, 0, 0) },
-            };
+            public Node[] torpedoes;       // non-null: the model built its own launcher (two loaded torpedoes)
         }
 
         static Spec BuildBarracuda(Ctx ctx, Node root, BotDesign d, Texture2D tex)
@@ -733,19 +663,26 @@ namespace Duburi.Game
             }
         }
 
-        /// createBotMesh(design, color, { logoTexture }): the vehicle under 'parent' (a mirrored World
-        /// root or one of its children), positioned in three.js space with BotMesh.SetPose.
-        public static BotMesh CreateBotMesh(BotDesign design, string color, Texture2D logoTexture, Transform parent, int layer = -1)
+        /// The finished scene-graph tree of a vehicle (static parts merged per material) before it
+        /// becomes GameObjects.
+        internal sealed class BotTree
+        {
+            public Node group, grip, tip;
+            public List<Node> props;
+            public Node[] fingers, markers, torpedoes;
+        }
+
+        internal static BotTree BuildTree(BotDesign design, string color, Texture2D logoTexture)
         {
             color = string.IsNullOrEmpty(color) ? design.color : color;
             var ctx = MakeCtx(color);
             var group = Node.Group("bot_" + design.id);
             var spec = Build(design.id, ctx, group, design, logoTexture);
 
-            AddSensors(ctx, group, spec.sensors);
+            if (spec.sensors != null) AddSensors(ctx, group, spec.sensors);
             var grip = AddGripper(ctx, group, design.gripper, spec.grip, out var fingers, out var tip);
             var markers = AddMarkers(ctx, group, design.marker, color);
-            var torpedoes = AddTorpedoes(ctx, group, design.torpedo, color, spec.torp);
+            var torpedoes = spec.torpedoes ?? AddTorpedoes(ctx, group, design.torpedo, color, spec.torp);
             var props = spec.props;
 
             var dynamic = new List<Node>();
@@ -753,16 +690,23 @@ namespace Duburi.Game
             MergeStatic(group, dynamic);
             foreach (var d in dynamic) MergeStatic(d, new Node[0]);
             group.Traverse(o => { o.castShadow = false; o.receiveShadow = false; });
+            return new BotTree { group = group, grip = grip, tip = tip, props = props, fingers = fingers, markers = markers, torpedoes = torpedoes };
+        }
 
+        /// createBotMesh(design, color, { logoTexture }): the vehicle under 'parent' (a mirrored World
+        /// root or one of its children), positioned in three.js space with BotMesh.SetPose.
+        public static BotMesh CreateBotMesh(BotDesign design, string color, Texture2D logoTexture, Transform parent, int layer = -1)
+        {
+            var t = BuildTree(design, color, logoTexture);
             var bm = new BotMesh();
-            bm.group = group.Realize(parent, bm.owned, layer);
-            bm.props = new Transform[props.Count];
-            for (int i = 0; i < props.Count; i++) bm.props[i] = props[i].transform;
-            bm.gripper = grip.transform;
-            bm.gripPoint = tip.transform;
-            bm.fingers = new[] { fingers[0].transform, fingers[1].transform };
-            bm.markers = new[] { markers[0].transform.gameObject, markers[1].transform.gameObject };
-            bm.torpedoes = new[] { torpedoes[0].transform.gameObject, torpedoes[1].transform.gameObject };
+            bm.group = t.group.Realize(parent, bm.owned, layer);
+            bm.props = new Transform[t.props.Count];
+            for (int i = 0; i < t.props.Count; i++) bm.props[i] = t.props[i].transform;
+            bm.gripper = t.grip.transform;
+            bm.gripPoint = t.tip.transform;
+            bm.fingers = new[] { t.fingers[0].transform, t.fingers[1].transform };
+            bm.markers = new[] { t.markers[0].transform.gameObject, t.markers[1].transform.gameObject };
+            bm.torpedoes = new[] { t.torpedoes[0].transform.gameObject, t.torpedoes[1].transform.gameObject };
             bm.Init();
             return bm;
         }

@@ -120,7 +120,7 @@ namespace Duburi.Game
         readonly Func<float, float, float> waveY;
         Env waveEnv;
         readonly bool[] padHeld = new bool[InputHub.MaxPads];
-        string lastError;
+        readonly HashSet<string> loggedErrors = new HashSet<string>();
         // scene / view changes and the last version drawn: a change made after this frame's draw
         // (a uGUI click runs after Boot.Update) is drawn in LateUpdate, so a new camera never renders
         // a frame without its pose and per-camera state
@@ -221,13 +221,16 @@ namespace Duburi.Game
         // which part of the frame is running: shown with an error, because WebGL builds have no stack traces
         string step = "start";
 
-        // keep the loop going after an exception: log it once (the error panel shows it), count repeats
+        // keep the loop going after an exception: log each kind of error once with where it happened (the
+        // console; the error panel too in the Editor / Development builds) and count repeats, so a fault
+        // that happens every frame (or two that alternate) does not flood the log
         void Report(Exception e)
         {
-            string key = e.GetType().Name + ": " + e.Message + " [in " + step + "]";
-            if (key == lastError) { errors?.Repeat(); return; }
-            lastError = key;
-            Debug.LogError("Life as Duburi: " + key + "\n" + e);
+            string key = Faults.Key(e, step);
+            if (loggedErrors.Contains(key)) { errors?.Repeat(); return; }
+            if (loggedErrors.Count >= 64) loggedErrors.Clear();
+            loggedErrors.Add(key);
+            Debug.LogError(Faults.Prefix + key + "\n" + e);
         }
 
         // browsers start audio only after a user gesture: any key, click, tap or new pad button
@@ -286,7 +289,8 @@ namespace Duburi.Game
         void MenuFrame(float dt)
         {
             if (menuCam != null && scenery != null && extras != null) MenuBackdrop(dt);
-            step = "menu sound"; sound.Tick(dt, menuSound);
+            step = "menu sound";
+            try { sound.Tick(dt, menuSound); } catch (Exception e) { Report(e); }
         }
 
         void MenuBackdrop(float dt)
@@ -297,6 +301,7 @@ namespace Duburi.Game
             for (int k = 0; k < menuBots.Count; k++)
             {
                 var b = menuBots[k];
+                if (b.m == null || b.m.group == null) continue;
                 float a = t * 0.25f + b.ph;
                 float rad = 2.2f + b.i * 0.8f;
                 var pos = new Vector3(Mathf.Cos(a) * rad, -1.4f - b.i * 0.5f + Mathf.Sin(t * 0.7f + b.i) * 0.15f, Mathf.Sin(a) * rad - 2);
@@ -313,11 +318,15 @@ namespace Duburi.Game
                     B.Emit(p.x, p.y, p.z, v.x, v.y, v.z, 2, 0.006f);
                 }
             }
-            step = "menu bubbles"; B?.Update(dt, t);
+            step = "menu bubbles";
+            try { B?.Update(dt, t); } catch (Exception e) { Report(e); }
             step = "menu camera";
             menuCam.Position = new Vector3(Mathf.Sin(t * 0.05f) * 1.5f, -1.2f, 4.5f);
             menuCam.LookAt(new Vector3(0, -1.6f, -2));
-            step = "menu scenery"; scenery.Update(t, new WaveState { A = 0.1f, K = 0.2f, W = 1.4f, T = t, D = new Vector2(0.5f, 0.86f) });
+            // a scenery animation that fails must not keep the camera from being set up for this frame
+            step = "menu scenery";
+            try { scenery.Update(t, new WaveState { A = 0.1f, K = 0.2f, W = 1.4f, T = t, D = new Vector2(0.5f, 0.86f) }); }
+            catch (Exception e) { Report(e); }
             step = "menu view"; Views.DrawView(menuCam, scenery, extras, post, null);
             drawnVersion = sceneVersion;
         }
@@ -653,11 +662,18 @@ namespace Duburi.Game
             float alpha = (float)Math.Min(1, acc / Vehicle.DT);
             step = "events"; Events();
             step = "robots"; SyncMeshes(alpha, paused ? 0 : dt);
-            step = "bubbles"; Effects(paused ? 0 : dt);
-            step = "sound"; Audio(dt);
-            step = "course"; course3d.Update(g.time);
-            step = "scenery"; scenery.Update((float)g.env.time, g.env);
-            step = "hud"; hud.Update(dt);
+            // the decorative / secondary parts run on their own: one that fails is reported (once) and the
+            // others, the HUD and the cameras still run this frame
+            step = "bubbles";
+            try { Effects(paused ? 0 : dt); } catch (Exception e) { Report(e); }
+            step = "sound";
+            try { Audio(dt); } catch (Exception e) { Report(e); }
+            step = "course";
+            try { course3d?.Update(g.time); } catch (Exception e) { Report(e); }
+            step = "scenery";
+            try { scenery?.Update((float)g.env.time, g.env); } catch (Exception e) { Report(e); }
+            step = "hud";
+            try { hud?.Update(dt); } catch (Exception e) { Report(e); }
             step = "cameras";
             for (int i = 0; i < views.Count; i++) RenderView(views[i], dt);
             drawnVersion = sceneVersion;

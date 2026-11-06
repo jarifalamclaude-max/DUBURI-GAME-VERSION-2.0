@@ -49,6 +49,7 @@ namespace UnityEditor
         public static void SaveAssets() { }                                                     // Modules/AssetDatabase/Editor/ScriptBindings/AssetDatabase.bindings.cs:577
         public static void SaveAssetIfDirty(Object obj) { }                                     // Modules/AssetDatabase/Editor/ScriptBindings/AssetDatabase.bindings.cs:584
         public static string[] FindAssets(string filter, string[] searchInFolders) => null;     // Editor/Mono/AssetDatabase/AssetDatabaseSearching.cs:38
+        public static bool TryGetGUIDAndLocalFileIdentifier(Object obj, out string guid, out long localId) { guid = null; localId = 0; return false; } // Modules/AssetDatabase/Editor/ScriptBindings/AssetDatabase.bindings.cs:879
     }
 
     // Editor/Mono/SerializedObject.bindings.cs:18
@@ -67,11 +68,13 @@ namespace UnityEditor
     public partial class SerializedProperty : IDisposable
     {
         public SerializedProperty Copy() => null;                                 // Editor/Mono/SerializedProperty.bindings.cs:230
+        public SerializedProperty FindPropertyRelative(string relativePropertyPath) => null; // Editor/Mono/SerializedProperty.bindings.cs:240
         public SerializedProperty GetArrayElementAtIndex(int index) => null;      // Editor/Mono/SerializedProperty.bindings.cs:270
         public void Dispose() { }                                                 // Editor/Mono/SerializedProperty.bindings.cs:531
         public string name => null;                                               // Editor/Mono/SerializedProperty.bindings.cs:634
         public string propertyPath => null;                                       // Editor/Mono/SerializedProperty.bindings.cs:709
         public int intValue { get; set; }                                         // Editor/Mono/SerializedProperty.bindings.cs:1010
+        public long longValue { get; set; }                                       // Editor/Mono/SerializedProperty.bindings.cs:1031
         public bool boolValue { get; set; }                                       // Editor/Mono/SerializedProperty.bindings.cs:1074
         public float floatValue { get; set; }                                     // Editor/Mono/SerializedProperty.bindings.cs:1095
         public Object objectReferenceValue { get; set; }                          // Editor/Mono/SerializedProperty.bindings.cs:1246

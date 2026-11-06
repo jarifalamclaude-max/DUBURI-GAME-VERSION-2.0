@@ -1060,6 +1060,7 @@ namespace Duburi.Game
                 var baseNrm = fish.nrm.ToArray();
                 animators.Add(t =>
                 {
+                    if (dm.mesh == null) return;
                     for (int i = 0; i < total; i++)
                     {
                         int o = i * 7;
@@ -1079,12 +1080,13 @@ namespace Duburi.Game
                             // rotation about Y then uniform scale + translation
                             float x = (cy * lp.x + sy * lp.z) * sc, z = (-sy * lp.x + cy * lp.z) * sc;
                             dm.pos[vb + v] = new Vector3(pos.x + x, pos.y + lp.y * sc, pos.z + z);
+                            if (dm.nrm == null || v >= baseNrm.Length) continue;
                             Vector3 n = baseNrm[v];
                             dm.nrm[vb + v] = new Vector3(cy * n.x + sy * n.z, n.y, -sy * n.x + cy * n.z);
                         }
                     }
                     dm.mesh.SetVertices(dm.pos);
-                    dm.mesh.SetNormals(dm.nrm);
+                    if (dm.nrm != null) dm.mesh.SetNormals(dm.nrm);
                 });
             }
 
@@ -1194,6 +1196,9 @@ namespace Duburi.Game
             // ---- realize
             rootN.Add(water.node);
             water.node.mat = null; // the water's material is per camera (waterMat)
+            // the CPU-animated meshes (fish, kelp sway, boundary rope) are realized with the scenery too:
+            // MakeDynMesh(.., asNode: true) only queues them (RealizeDyn picks up their meshes)
+            for (int i = 0; i < dmPending.Count; i++) if (dmPending[i].node.parent == null) rootN.Add(dmPending[i].node);
             root = rootN.Realize(world, owned);
             var wr = water.node.transform.gameObject;
             wr.AddComponent<MeshFilter>().sharedMesh = water.mesh;
@@ -1212,7 +1217,7 @@ namespace Duburi.Game
             }
 
             // ---- caustics on the sun (the JS adds them to the floor / walls in the fragment shader)
-            cookie = CausticCookie.Shared;
+            cookie = CausticCookie.For(GraphicsQuality.Spec.hiResTextures); // 256² on Ultra, 128² otherwise
             ApplyCookie();
         }
 
@@ -1338,7 +1343,7 @@ namespace Duburi.Game
             Color surf = C(look.surface), deep = C(look.fog) * 0.7f, waterC = C(look.water), sky = C(look.sky), sunCol = C(look.sun);
             float lightK = (float)look.light, aboveAlpha = isPool ? 0.35f : 0.72f;
             const float shim = 0.2f; // mean of the animated ripple shimmer
-            const int N = 256;
+            int N = GraphicsQuality.Spec.hiResTextures ? 512 : 256; // Ultra: sharper sun glint and Snell's window rim
             Vector3 sd = SunDir;
 
             // from below: Snell's window toward straight up, total internal reflection outside it
@@ -1537,7 +1542,7 @@ namespace Duburi.Game
             {
                 if (dm.node.transform == null) continue;
                 var mf = dm.node.transform.GetComponent<MeshFilter>();
-                if (mf != null) { dm.mesh = mf.sharedMesh; dm.mesh.MarkDynamic(); }
+                if (mf != null && mf.sharedMesh != null) { dm.mesh = mf.sharedMesh; dm.mesh.MarkDynamic(); }
             }
         }
 
@@ -1625,43 +1630,60 @@ namespace Duburi.Game
     }
 
     /// The floor caustics as a light cookie: the JS caustic pattern (after Dave Hoskins, uv period 1)
-    /// baked into key frames once, cross-faded every frame into one R8 texture.
+    /// baked into key frames once, cross-faded every frame into one R8 texture. 128² (2.7 cm texels over
+    /// the 3.5 m tile), 256² on Ultra (sharper caustic lines on a 4K image); the key frames after the
+    /// first are baked a slice per frame (at most 128² pixels per frame).
     public sealed class CausticCookie
     {
-        const int N = 128, Frames = 32;
-        const float Step = 0.12f;   // pattern time between key frames
+        const int Frames = 32;
+        const float Step = 0.12f;          // pattern time between key frames
+        const int BakeBudget = 128 * 128;  // pixels baked per frame
+        readonly int N;
         readonly byte[][] keys = new byte[Frames][];
-        int made;
+        int made, bakeRow;
         readonly byte[] lut = new byte[256];
-        readonly byte[] buf = new byte[N * N];
+        readonly byte[] buf;
         float lutGain = -1, lutScale = -1;
         public Texture2D Texture { get; }
 
-        static CausticCookie shared;
-        public static CausticCookie Shared => shared ?? (shared = new CausticCookie());
+        static CausticCookie shared, sharedHi;
+        public static CausticCookie Shared => shared ?? (shared = new CausticCookie(128));
+        /// the cookie for a quality level (hiRes: QualitySpec.hiResTextures)
+        public static CausticCookie For(bool hiRes) => hiRes ? sharedHi ?? (sharedHi = new CausticCookie(256)) : Shared;
 
-        CausticCookie()
+        CausticCookie(int size)
         {
+            N = size;
+            buf = new byte[N * N];
             var fmt = SystemInfo.SupportsTextureFormat(TextureFormat.R8) ? TextureFormat.R8 : TextureFormat.Alpha8;
             Texture = new Texture2D(N, N, fmt, true, true) { name = "caustics", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Trilinear };
             Texture.hideFlags = HideFlags.DontSave;
-            keys[0] = Bake(23f);
+            keys[0] = new byte[N * N];
+            BakeRows(keys[0], 23f, 0, N);
             made = 1;
             Fill(keys[0]);
         }
 
-        // tileable water caustic, min(c, 2) / 2 as a byte
-        static byte[] Bake(float time)
+        // tileable water caustic, min(c, 2) / 2 as a byte, rows [j0, j1)
+        void BakeRows(byte[] px, float time, int j0, int j1)
         {
-            var px = new byte[N * N];
-            for (int j = 0; j < N; j++)
+            for (int j = j0; j < j1; j++)
                 for (int i = 0; i < N; i++)
                 {
                     float u = (i + 0.5f) / N, v = (j + 0.5f) / N;
                     float c = Mathf.Min(Caustic(u, v, time), 2f);
                     px[j * N + i] = (byte)Mathf.Clamp(Mathf.RoundToInt(c / 2f * 255f), 0, 255);
                 }
-            return px;
+        }
+
+        // the next slice of the next key frame
+        void BakeStep()
+        {
+            if (keys[made] == null) { keys[made] = new byte[N * N]; bakeRow = 0; }
+            int end = Mathf.Min(N, bakeRow + Mathf.Max(1, BakeBudget / N));
+            BakeRows(keys[made], 23f + made * Step, bakeRow, end);
+            bakeRow = end;
+            if (bakeRow >= N) { made++; bakeRow = 0; }
         }
 
         static float Mod(float x, float y) => x - y * Mathf.Floor(x / y);
@@ -1689,7 +1711,7 @@ namespace Duburi.Game
         /// pattern time t; cookie = (1 + cc * gain) / scale
         public void Update(float t, float gain, float scale)
         {
-            if (made < Frames) { keys[made] = Bake(23f + made * Step); made++; } // one more key frame per frame
+            if (made < Frames) BakeStep(); // the key frames still missing, a slice per frame
             if (gain != lutGain || scale != lutScale)
             {
                 for (int i = 0; i < 256; i++) lut[i] = (byte)Mathf.Clamp(Mathf.RoundToInt((1 + 2 * i / 255f * gain) / scale * 255f), 0, 255);

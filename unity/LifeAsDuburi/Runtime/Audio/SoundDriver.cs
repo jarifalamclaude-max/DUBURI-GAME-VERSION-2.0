@@ -13,9 +13,13 @@ namespace Duburi.Game
     {
         internal SynthSound owner;
 
+        // runs outside the App's frame: an error is reported with its place (logged once) and the sound
+        // keeps going on the next frame
         void Update()
         {
-            if (owner != null) owner.Advance(Time.unscaledDeltaTime);
+            if (owner == null) return;
+            try { owner.Advance(Time.unscaledDeltaTime); }
+            catch (System.Exception e) { Faults.Report("sound engine", e); }
         }
 
         void OnDestroy()

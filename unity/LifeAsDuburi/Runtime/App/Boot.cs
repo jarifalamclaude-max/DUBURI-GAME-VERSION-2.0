@@ -1,6 +1,7 @@
 // The one component in the LifeAsDuburi scene (added by Life as Duburi -> Set Up
-// Project): starts the game (App = src/main.js) and drives it every frame. An error
-// panel shows any exception on screen for playtests.
+// Project): starts the game (App = src/main.js) and drives it every frame. The error
+// panel shows "could not start" in every build, and any later exception on screen only
+// in the Editor and in Development builds (release builds log it to the console).
 
 using System;
 using Duburi.Core;

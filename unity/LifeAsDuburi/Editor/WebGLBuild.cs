@@ -1,7 +1,9 @@
 // Menu "Life as Duburi / Build WebGL": checks the project (Set Up Project if
 // something is missing), switches the target to WebGL when needed (asks first),
 // builds to <project>/Builds/WebGL and says how big it is and how to test and
-// share it.
+// share it. "Build WebGL (Development)" makes a Development Build in Builds/WebGL-Dev
+// for testers: it also shows the red error box on screen (release builds only log
+// errors to the browser console).
 
 using System;
 using System.Collections.Generic;
@@ -16,7 +18,13 @@ namespace Duburi.EditorTools
     public static class WebGLBuild
     {
         [MenuItem("Life as Duburi/Build WebGL", false, 20)]
-        public static void BuildMenu()
+        public static void BuildMenu() => Build(false);
+
+        /// a Development Build: the on-screen error box (ErrorPanel) works in it
+        [MenuItem("Life as Duburi/Build WebGL (Development)", false, 21)]
+        public static void BuildDevMenu() => Build(true);
+
+        static void Build(bool development)
         {
             if (EditorApplication.isPlayingOrWillChangePlaymode)
             {
@@ -34,7 +42,7 @@ namespace Duburi.EditorTools
             }
             if (!IsSetUp())
             {
-                if (!EditorUtility.DisplayDialog("Build WebGL", "The project is not fully set up yet (scene, materials or post-processing profile missing). Run Set Up Project now?", "Set Up and continue", "Cancel"))
+                if (!EditorUtility.DisplayDialog("Build WebGL", "The project is not fully set up yet (scene, materials or post-processing profiles missing — after an update of the game files Set Up Project must run again). Run Set Up Project now?", "Set Up and continue", "Cancel"))
                     return;
                 report = new ProjectSetup.Report();
                 if (!ProjectSetup.Run(report, interactive: true))
@@ -71,14 +79,14 @@ namespace Duburi.EditorTools
             foreach (var s in EditorBuildSettings.scenes) if (s != null && s.enabled) scenes.Add(s.path);
             if (scenes.Count == 0) scenes.Add(ProjectSetup.ScenePath);
             string project = Path.GetDirectoryName(Application.dataPath);
-            string outDir = Path.Combine(project, "Builds", "WebGL");
+            string outDir = Path.Combine(project, "Builds", development ? "WebGL-Dev" : "WebGL");
             var options = new BuildPlayerOptions
             {
                 scenes = scenes.ToArray(),
                 locationPathName = outDir,
                 target = BuildTarget.WebGL,
                 targetGroup = BuildTargetGroup.WebGL,
-                options = BuildOptions.None,
+                options = development ? BuildOptions.Development : BuildOptions.None,
             };
             BuildReport result = BuildPipeline.BuildPlayer(options);
             var sum = result != null ? result.summary : default;
@@ -94,6 +102,7 @@ namespace Duburi.EditorTools
             long bytes = FolderSize(outDir);
             string size = (bytes / (1024.0 * 1024.0)).ToString("0.0") + " MB";
             string msg =
+                (development ? "Development Build (shows the red error box). " : "") +
                 "Built in " + Math.Round(sum.totalTime.TotalMinutes, 1) + " min: " + size + " in\n" + outDir + "\n\n" +
                 "Test it: the page must come from a web server, not from a file. In that folder run\n" +
                 "    python -m http.server 8000\n" +
@@ -110,6 +119,7 @@ namespace Duburi.EditorTools
         {
             if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(ProjectSetup.ScenePath) == null) return false;
             if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(ProjectSetup.PostProfilePath) == null) return false;
+            if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(ProjectSetup.PostProfileUltraPath) == null) return false; // added with Ultra graphics
             if (AssetDatabase.LoadAssetAtPath<Material>(ProjectSetup.MaterialsDir + "/Lit.mat") == null) return false;
             var list = EditorBuildSettings.scenes;
             return list.Length > 0 && list[0].path == ProjectSetup.ScenePath && list[0].enabled;

@@ -11,7 +11,8 @@ using Env = Duburi.Core.Environment;
 namespace Duburi.Game
 {
     /// main.js sceneExtras(scene, look, arena): reflections for metal and acrylic parts, sun shadows,
-    /// bubbles, the look's water colour and turbidity. Follows GraphicsQuality changes (shadows) by itself.
+    /// bubbles, the look's water colour and turbidity. Follows GraphicsQuality changes (shadows, Ultra's
+    /// live reflections) by itself.
     public sealed class SceneExtras
     {
         /// scene.environmentIntensity
@@ -20,6 +21,8 @@ namespace Duburi.Game
         public const float EnvironmentSize = 1000f;
 
         public EnvLight Env { get; private set; }
+        /// Ultra: the live reflection probe of the arena (null on the other levels)
+        public LiveReflection Reflection { get; private set; }
         /// the shadow-casting sun (null with shadows off)
         public Light Sun { get; private set; }
         public Bubbles Bubbles { get; private set; }
@@ -45,9 +48,10 @@ namespace Duburi.Game
             e.Env = Graphics3D.MakeEnvironment(look, EnvironmentIntensity, Space.ToUnity(0, (float)-arena.depth / 2, 0), EnvironmentSize);
             Ambient.SetEnvironment(e.Env);
             var q = GraphicsQuality.Spec;
-            e.Sun = Graphics3D.SetupShadows(scenery, q.shadows, arena);
-            e.Bubbles = new Bubbles(q.bubbles);
             e.Look = look;
+            e.Sun = Graphics3D.SetupShadows(scenery, q.shadows, arena, q.hqShadows);
+            e.SyncReflection(q);
+            e.Bubbles = new Bubbles(q.bubbles);
             e.WaterColor = Colors.Rgb(look.water).linear;
             e.Turbidity = Mathf.Clamp01(((float)look.fogDensity - 0.02f) / 0.05f);
             GraphicsQuality.Changed += e.OnQuality;
@@ -56,19 +60,37 @@ namespace Duburi.Game
 
         void OnQuality(string id) => ApplyQuality();
 
-        /// the pause menu's quality change: shadows follow the new level (the bubble pool keeps its size)
+        /// the pause menu's quality change: shadows and live reflections follow the new level (the bubble
+        /// pool keeps its size)
         public void ApplyQuality()
         {
-            Sun = Graphics3D.SetupShadows(scenery, GraphicsQuality.Spec.shadows, arena);
+            var q = GraphicsQuality.Spec;
+            Sun = Graphics3D.SetupShadows(scenery, q.shadows, arena, q.hqShadows);
+            SyncReflection(q);
         }
+
+        void SyncReflection(QualitySpec q)
+        {
+            if (q.reflections && Reflection == null)
+                Reflection = Graphics3D.MakeLiveReflection(Look, arena, scenery != null && scenery.IsPool);
+            else if (!q.reflections && Reflection != null)
+            {
+                Reflection.Dispose();
+                Reflection = null;
+            }
+        }
+
+        /// once per frame (Views.DrawView): keeps the live reflections rendering
+        public void Tick() => Reflection?.Tick();
 
         public void Dispose()
         {
             GraphicsQuality.Changed -= OnQuality;
             if (Ambient.Environment == Env) Ambient.SetEnvironment(null);
             Env?.Dispose();
+            Reflection?.Dispose();
             Bubbles?.Dispose();
-            Env = null; Bubbles = null; Sun = null;
+            Env = null; Reflection = null; Bubbles = null; Sun = null;
         }
     }
 
@@ -231,9 +253,12 @@ namespace Duburi.Game
         /// scenery.applyForCamera (fog, background, rays, water look), the bubbles' point size and draw
         /// order, and post.render's grade (under water: depth below the surface at the camera). env is
         /// the game's environment (null in the menu: surface at 0). Call it every frame for every view.
+        /// Also follows window resizes (render scale) and keeps Ultra's live reflections rendering.
         public static void DrawView(ViewCamera cam, Scenery scenery, SceneExtras extras, Post post, Env env)
         {
             if (cam == null) return;
+            GraphicsQuality.Refresh();   // a resized window: Ultra's supersampling follows (no-op otherwise)
+            extras?.Tick();              // Ultra's live reflections (once per frame)
             scenery?.ApplyForCamera(cam.camera);
             float h = cam.camera.pixelHeight * GraphicsQuality.RenderScale;
             if (extras != null && extras.Bubbles != null)

@@ -345,7 +345,9 @@ namespace Duburi.Game
         public RectTransform header, scroll, content;
         Vector2 lastParent;
 
-        RectTransform Parent => (RectTransform)rectTransform.parent;
+        RectTransform Parent => rectTransform.parent as RectTransform;
+        // the space the panel may fill (its parent; itself while it has no RectTransform parent)
+        Rect Room { get { var p = Parent; return p != null ? p.rect : rectTransform.rect; } }
 
         public override void CalculateLayoutInputHorizontal()
         {
@@ -357,7 +359,7 @@ namespace Duburi.Game
 
         public override void SetLayoutHorizontal()
         {
-            float w = Mathf.Max(0, Mathf.Min(maxWidth, Parent.rect.width - 2 * margin));
+            float w = Mathf.Max(0, Mathf.Min(maxWidth, Room.width - 2 * margin));
             m_Tracker.Add(this, rectTransform, DrivenTransformProperties.SizeDelta);
             rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, w);
             if (header != null) SetChildAlongAxis(header, 0, 0, w);
@@ -368,7 +370,7 @@ namespace Duburi.Game
         {
             float hh = header != null ? LayoutUtility.GetPreferredHeight(header) : 0;
             float ch = content != null ? LayoutUtility.GetPreferredHeight(content) : 0;
-            float h = Mathf.Max(hh, Mathf.Min(hh + ch, Parent.rect.height - 2 * margin));
+            float h = Mathf.Max(hh, Mathf.Min(hh + ch, Room.height - 2 * margin));
             rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, h);
             if (header != null) SetChildAlongAxis(header, 1, 0, hh);
             if (scroll != null) SetChildAlongAxis(scroll, 1, hh, h - hh);
@@ -376,7 +378,9 @@ namespace Duburi.Game
 
         void LateUpdate()
         {
-            var p = Parent.rect.size;
+            var parent = Parent;
+            if (parent == null) return;
+            var p = parent.rect.size;
             if (p != lastParent) { lastParent = p; SetDirty(); }
         }
     }

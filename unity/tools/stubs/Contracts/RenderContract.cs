@@ -19,7 +19,7 @@ namespace Duburi.Game
 
     public static class GraphicsQuality
     {
-        public static readonly string[] Order = { "high", "medium", "low" };
+        public static readonly string[] Order = { "ultra", "high", "medium", "low" };
         public static string Current => "high";
         public static string Label(string id) => id;   // "High", "Medium", "Low"
         public static void Set(string id) { }          // remember (PlayerPrefs) + apply global settings

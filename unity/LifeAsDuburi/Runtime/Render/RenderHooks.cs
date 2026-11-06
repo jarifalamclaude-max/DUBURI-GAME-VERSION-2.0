@@ -43,7 +43,6 @@ namespace Duburi.Game
             remove { handlers.Remove(value); }
         }
         static readonly List<Action<Camera, CamState>> handlers = new List<Action<Camera, CamState>>();
-        static readonly HashSet<string> reported = new HashSet<string>();
 
         static readonly Dictionary<Camera, CamState> states = new Dictionary<Camera, CamState>();
         static readonly List<Camera> dead = new List<Camera>();
@@ -98,30 +97,37 @@ namespace Duburi.Game
             dead.Clear();
         }
 
+        // URP calls these inside its render loop, outside the App's frame: nothing may escape (an exception
+        // here would stop the whole frame's rendering), and every error names its place (WebGL builds have
+        // no stack traces) and is logged once (Faults), not every frame.
         static void OnBeginCameraRendering(ScriptableRenderContext ctx, Camera cam)
         {
-            if (cam == null || !states.TryGetValue(cam, out var st)) return;
-            if (st.hide != null)
+            if (cam == null || !states.TryGetValue(cam, out var st) || st == null) return;
+            try
             {
-                for (int i = 0; i < st.hide.Length; i++) if (st.hide[i] != null) st.hide[i].forceRenderingOff = true;
-                st.hidden = st.hide;
+                if (st.hide != null)
+                {
+                    for (int i = 0; i < st.hide.Length; i++) if (st.hide[i] != null) st.hide[i].forceRenderingOff = true;
+                    st.hidden = st.hide;
+                }
             }
+            catch (Exception e) { Faults.Report("camera render: hide own vehicle", e); }
             for (int i = 0; i < handlers.Count; i++)
             {
                 var h = handlers[i];
                 try { h(cam, st); }
-                catch (Exception e)
-                {
-                    string key = e.GetType().Name + ": " + e.Message + " [in camera render: " + h.Method.DeclaringType?.Name + "." + h.Method.Name + "]";
-                    if (reported.Add(key)) Debug.LogError("Life as Duburi: " + key + "\n" + e);
-                }
+                catch (Exception e) { Faults.Report("camera render: " + h.Method.DeclaringType?.Name + "." + h.Method.Name, e); }
             }
         }
 
         static void OnEndCameraRendering(ScriptableRenderContext ctx, Camera cam)
         {
-            if (cam == null || !states.TryGetValue(cam, out var st) || st.hidden == null) return;
-            for (int i = 0; i < st.hidden.Length; i++) if (st.hidden[i] != null) st.hidden[i].forceRenderingOff = false;
+            if (cam == null || !states.TryGetValue(cam, out var st) || st == null || st.hidden == null) return;
+            try
+            {
+                for (int i = 0; i < st.hidden.Length; i++) if (st.hidden[i] != null) st.hidden[i].forceRenderingOff = false;
+            }
+            catch (Exception e) { Faults.Report("camera render: show own vehicle", e); }
             st.hidden = null;
         }
 
@@ -136,7 +142,6 @@ namespace Duburi.Game
             }
             hooked = false;
             handlers.Clear();
-            reported.Clear();
             states.Clear();
         }
     }

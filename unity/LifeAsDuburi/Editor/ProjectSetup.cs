@@ -2,7 +2,13 @@
 // Unity 6.3 "Universal 3D" project, safe to run again at any time:
 //   * checks: Unity 6000.3+, URP active, Input System active
 //   * template materials in Resources/Duburi/Materials (Render/Mats.cs clones them)
-//   * Resources/Duburi/PostProfile.asset (Bloom, Tonemapping ACES, ColorAdjustments, Vignette)
+//   * Resources/Duburi/PostProfile.asset (Bloom, Tonemapping ACES, ColorAdjustments, Vignette) and
+//     PostProfileUltra.asset (the same + DepthOfField Gaussian, Bloom high-quality filtering) — URP keeps
+//     only the post variants found in VolumeProfile assets
+//   * every URP asset the quality levels use: HDR, main-light shadows per pixel, soft shadows, light
+//     cookies, reflection-probe blending + box projection; every Universal Renderer: the Screen Space
+//     Ambient Occlusion feature (Ultra switches it at run time; active in the asset so builds keep it)
+//   * every quality level: real-time reflection probes on (Ultra's live reflections)
 //   * import settings for Resources/Duburi/Art
 //   * Graphics fog stripping that keeps Linear / Exp / Exp2
 //   * Scenes/LifeAsDuburi.unity (fog on, one "Life as Duburi" object with Duburi.Game.Boot),
@@ -30,6 +36,7 @@ namespace Duburi.EditorTools
         public const string MaterialsDir = ResourcesDir + "/Materials";
         public const string ArtDir = ResourcesDir + "/Art";
         public const string PostProfilePath = ResourcesDir + "/PostProfile.asset";
+        public const string PostProfileUltraPath = ResourcesDir + "/PostProfileUltra.asset";
         public const string ScenesDir = Root + "/Scenes";
         public const string ScenePath = ScenesDir + "/LifeAsDuburi.unity";
         public const string BootObjectName = "Life as Duburi";
@@ -85,8 +92,12 @@ namespace Duburi.EditorTools
             {
                 EditorUtility.DisplayProgressBar("Life as Duburi", "Materials", 0.1f);
                 ok &= CreateMaterials(report);
-                EditorUtility.DisplayProgressBar("Life as Duburi", "Post-processing profile", 0.3f);
-                ok &= CreatePostProfile(report);
+                EditorUtility.DisplayProgressBar("Life as Duburi", "Post-processing profiles", 0.25f);
+                ok &= CreatePostProfile(report, PostProfilePath, ultra: false);
+                ok &= CreatePostProfile(report, PostProfileUltraPath, ultra: true);
+                EditorUtility.DisplayProgressBar("Life as Duburi", "Render pipeline (Ultra graphics)", 0.35f);
+                ok &= ConfigureRenderPipelines(report);
+                SetQualityLevels(report);
                 EditorUtility.DisplayProgressBar("Life as Duburi", "Texture import settings", 0.45f);
                 SetTextureImport(report);
                 EditorUtility.DisplayProgressBar("Life as Duburi", "Fog shader stripping", 0.55f);
@@ -366,12 +377,16 @@ namespace Duburi.EditorTools
             return mi != null ? (Action<Material>)Delegate.CreateDelegate(typeof(Action<Material>), mi) : null;
         }
 
-        // ---- post-processing profile ------------------------------------------------------
+        // ---- post-processing profiles -----------------------------------------------------
 
         // A VolumeProfile with Bloom, Tonemapping (ACES), ColorAdjustments and Vignette, all
         // overrides active, so their shader variants are kept in the build (URP keeps the
-        // post-processing variants of the components found in VolumeProfile assets).
-        static bool CreatePostProfile(Report report)
+        // post-processing variants of the components found in VolumeProfile assets: Editor/
+        // ShaderBuildPreprocessor.cs GetSupportedFeaturesFromVolumes). The Ultra profile adds
+        // DepthOfField (Gaussian, high-quality sampling) and turns Bloom's high-quality filtering on,
+        // which keeps the _BLOOM_HQ variant and the Gaussian depth-of-field shader; the normal profile
+        // keeps it off (the other levels use the low-quality bloom variant).
+        static bool CreatePostProfile(Report report, string path, bool ultra)
         {
             var profileType = FindType("UnityEngine.Rendering.VolumeProfile");
             if (profileType == null)
@@ -380,12 +395,12 @@ namespace Duburi.EditorTools
                 return false;
             }
             EnsureFolder(ResourcesDir);
-            var profile = AssetDatabase.LoadAssetAtPath(PostProfilePath, profileType) as ScriptableObject;
+            var profile = AssetDatabase.LoadAssetAtPath(path, profileType) as ScriptableObject;
             bool isNew = profile == null;
             if (isNew)
             {
                 profile = ScriptableObject.CreateInstance(profileType);
-                AssetDatabase.CreateAsset(profile, PostProfilePath);
+                AssetDatabase.CreateAsset(profile, path);
             }
             var components = profileType.GetField("components")?.GetValue(profile) as IList;
             var add = profileType.GetMethod("Add", new[] { typeof(Type), typeof(bool) });
@@ -395,13 +410,14 @@ namespace Duburi.EditorTools
                 return false;
             }
             bool ok = true;
-            string[] names =
+            var names = new List<string>
             {
                 "UnityEngine.Rendering.Universal.Bloom",
                 "UnityEngine.Rendering.Universal.Tonemapping",
                 "UnityEngine.Rendering.Universal.ColorAdjustments",
                 "UnityEngine.Rendering.Universal.Vignette",
             };
+            if (ultra) names.Add("UnityEngine.Rendering.Universal.DepthOfField");
             foreach (var n in names)
             {
                 var t = FindType(n);
@@ -425,14 +441,207 @@ namespace Duburi.EditorTools
                         var mode = so.FindProperty("mode.m_Value");
                         if (mode != null) mode.intValue = 2; // TonemappingMode.ACES
                     }
+                    else if (t.Name == "Bloom")
+                    {
+                        // Overrides/Bloom.cs highQualityFiltering: on only in the Ultra profile
+                        var hq = so.FindProperty("highQualityFiltering.m_Value");
+                        if (hq != null) hq.boolValue = ultra;
+                    }
+                    else if (t.Name == "DepthOfField")
+                    {
+                        // Overrides/DepthOfField.cs: Gaussian (DepthOfFieldMode 1, far blur only) with
+                        // high-quality sampling; Post sets the distances per view at run time
+                        var mode = so.FindProperty("mode.m_Value");
+                        if (mode != null) mode.intValue = 1;
+                        var hqs = so.FindProperty("highQualitySampling.m_Value");
+                        if (hqs != null) hqs.boolValue = true;
+                    }
                     so.ApplyModifiedPropertiesWithoutUndo();
                 }
                 EditorUtility.SetDirty(comp);
             }
             EditorUtility.SetDirty(profile);
             AssetDatabase.SaveAssetIfDirty(profile);
-            if (ok) report.Ok("Post-processing profile " + PostProfilePath + (isNew ? " (created)" : " (checked)"));
+            if (ok) report.Ok("Post-processing profile " + path + (isNew ? " (created)" : " (checked)") +
+                              (ultra ? ": Ultra's depth of field + high-quality bloom" : ""));
             return ok;
+        }
+
+        // ---- render pipeline: what Ultra needs and cannot switch on at run time ----------------
+
+        const string UrpAssetType = "UnityEngine.Rendering.Universal.UniversalRenderPipelineAsset";
+        const string UniversalRendererType = "UnityEngine.Rendering.Universal.UniversalRendererData";
+        const string RendererDataType = "UnityEngine.Rendering.Universal.ScriptableRendererData";
+        const string SsaoType = "UnityEngine.Rendering.Universal.ScreenSpaceAmbientOcclusion";
+
+        // URP asset settings with internal setters (Data/UniversalRenderPipelineAsset.cs serialized names)
+        static readonly string[] UrpAssetSwitches =
+        {
+            "m_SupportsHDR",                  // HDR (ACES tone mapping on every level)
+            "m_MainLightShadowsSupported",    // sun shadows
+            "m_SoftShadowsSupported",         // the _SHADOWS_SOFT variant (Ultra sets the 7x7 filter per light)
+            "m_SupportsLightCookies",         // the floor caustics are a cookie on the sun
+            "m_ReflectionProbeBlending",      // the live reflection probe blends into the gradient environment
+            "m_ReflectionProbeBoxProjection", // and is box-projected onto the arena
+        };
+
+        static bool ConfigureRenderPipelines(Report report)
+        {
+            // every URP asset a quality level (or the Graphics default) uses: WebGL may pick any level
+            var assets = new List<RenderPipelineAsset>();
+            void AddAsset(RenderPipelineAsset a) { if (IsUrp(a) && !assets.Contains(a)) assets.Add(a); }
+            AddAsset(GraphicsSettings.defaultRenderPipeline);
+            var levels = QualitySettings.names;
+            for (int i = 0; i < levels.Length; i++) AddAsset(QualitySettings.GetRenderPipelineAssetAt(i));
+            if (assets.Count == 0)
+            {
+                report.Fail("No Universal Render Pipeline asset found — Ultra graphics (SSAO, soft shadows, reflections) not set up.");
+                return false;
+            }
+
+            bool ok = true;
+            var assetNames = new StringBuilder();
+            var renderers = new List<ScriptableObject>();
+            int changedAssets = 0;
+            foreach (var a in assets)
+            {
+                bool changed = false;
+                using (var so = new SerializedObject(a))
+                {
+                    foreach (var name in UrpAssetSwitches)
+                    {
+                        var p = so.FindProperty(name);
+                        if (p == null) { report.Warn(a.name + ": setting " + name + " not found (URP version?)"); continue; }
+                        if (!p.boolValue) { p.boolValue = true; changed = true; }
+                    }
+                    var mode = so.FindProperty("m_MainLightRenderingMode");
+                    if (mode != null && mode.intValue != 1) { mode.intValue = 1; changed = true; } // LightRenderingMode.PerPixel
+                    var list = so.FindProperty("m_RendererDataList");
+                    if (list != null)
+                        for (int i = 0; i < list.arraySize; i++)
+                            if (list.GetArrayElementAtIndex(i).objectReferenceValue is ScriptableObject rd && !renderers.Contains(rd)) renderers.Add(rd);
+                    if (changed) so.ApplyModifiedPropertiesWithoutUndo();
+                }
+                if (changed) { EditorUtility.SetDirty(a); AssetDatabase.SaveAssetIfDirty(a); changedAssets++; }
+                assetNames.Append(assetNames.Length > 0 ? ", " : "").Append(a.name);
+            }
+            report.Ok("URP assets (" + assetNames + "; " + changedAssets + " changed): HDR, sun shadows per pixel, soft shadows, light cookies, " +
+                      "reflection-probe blending + box projection. Depth texture: left as it is — SSAO and depth of field request it themselves on Ultra only.");
+
+            var universal = FindType(UniversalRendererType);
+            var ssaoType = FindType(SsaoType);
+            if (universal == null || ssaoType == null)
+            {
+                report.Fail("URP's UniversalRendererData / ScreenSpaceAmbientOcclusion types not found — Ultra runs without ambient occlusion.");
+                return false;
+            }
+            int added = 0, configured = 0;
+            foreach (var rd in renderers)
+            {
+                if (!universal.IsInstanceOfType(rd)) continue; // SSAO works with the Universal Renderer only (not 2D)
+                if (EnsureSsao(rd, ssaoType, out bool isNew)) { configured++; if (isNew) added++; }
+                else { report.Warn(rd.name + ": could not add Screen Space Ambient Occlusion"); ok = false; }
+            }
+            if (configured > 0)
+                report.Ok("Screen Space Ambient Occlusion in " + configured + " Universal Renderer(s) (" + added + " added): after opaques, depth + normals, " +
+                          "12 samples, bilateral blur. The game switches it on for Ultra only.");
+            else { report.Fail("No Universal Renderer found in the URP assets — Ultra runs without ambient occlusion."); ok = false; }
+            return ok;
+        }
+
+        // The SSAO renderer feature in a renderer data asset, added the way URP's editor does it
+        // (Editor/ScriptableRendererDataEditor.cs AddComponent: a sub-asset, the feature list and the
+        // local-id map), then set up (RendererFeatures/ScreenSpaceAmbientOcclusion.cs settings) and
+        // active: the build strips its shader and resources when no renderer has it active.
+        //  * AfterOpaque: blended over the opaque image. The normal mode needs the _SCREEN_SPACE_OCCLUSION
+        //    variant of every Lit shader, and URP strips the variant WITHOUT it when every renderer has
+        //    SSAO (Editor/ShaderBuildPreprocessor.cs everyRendererHasSSAO) — then the other levels, which
+        //    switch SSAO off, would lack it. After-opaque SSAO uses no material keyword at all.
+        //  * DepthNormals: the best normals; the depth-normals prepass also gives the depth texture that
+        //    depth of field and MSAA on WebGL 2 need.
+        static bool EnsureSsao(ScriptableObject rendererData, Type ssaoType, out bool isNew)
+        {
+            isNew = false;
+            ScriptableObject feature = null;
+            using (var so = new SerializedObject(rendererData))
+            {
+                var features = so.FindProperty("m_RendererFeatures");
+                var map = so.FindProperty("m_RendererFeatureMap");
+                if (features == null || map == null) return false;
+                for (int i = 0; i < features.arraySize && feature == null; i++)
+                    if (features.GetArrayElementAtIndex(i).objectReferenceValue is ScriptableObject f && ssaoType.IsInstanceOfType(f)) feature = f;
+                if (feature == null)
+                {
+                    feature = ScriptableObject.CreateInstance(ssaoType);
+                    if (feature == null) return false;
+                    feature.name = ssaoType.Name;
+                    AssetDatabase.AddObjectToAsset(feature, rendererData);
+                    AssetDatabase.TryGetGUIDAndLocalFileIdentifier(feature, out string _, out long localId);
+                    int n = features.arraySize;
+                    features.arraySize = n + 1;
+                    features.GetArrayElementAtIndex(n).objectReferenceValue = feature;
+                    if (map.arraySize < n) map.arraySize = n;
+                    map.arraySize = n + 1;
+                    map.GetArrayElementAtIndex(n).longValue = localId;
+                    so.ApplyModifiedPropertiesWithoutUndo();
+                    isNew = true;
+                }
+            }
+            using (var fo = new SerializedObject(feature))
+            {
+                SetBool(fo, "m_Active", true);
+                SetInt(fo, "m_Settings.AOMethod", 0);          // BlueNoise
+                SetBool(fo, "m_Settings.Downsample", false);    // full resolution
+                SetBool(fo, "m_Settings.AfterOpaque", true);
+                SetInt(fo, "m_Settings.Source", 1);             // DepthNormals
+                SetInt(fo, "m_Settings.NormalSamples", 2);      // High (used with the Depth source only)
+                SetFloat(fo, "m_Settings.Intensity", 1.2f);
+                SetFloat(fo, "m_Settings.DirectLightingStrength", 0.25f);
+                SetFloat(fo, "m_Settings.Radius", 0.3f);        // m: frame joints, thrusters, vehicles on the floor
+                SetInt(fo, "m_Settings.Samples", 0);            // High (12 samples)
+                SetInt(fo, "m_Settings.BlurQuality", 0);        // High (bilateral)
+                SetFloat(fo, "m_Settings.Falloff", 40f);        // m: the fog hides the rest
+                SetInt(fo, "m_Settings.SampleCount", -1);       // the legacy field, unused
+                fo.ApplyModifiedPropertiesWithoutUndo();
+            }
+            EditorUtility.SetDirty(feature);
+            EditorUtility.SetDirty(rendererData);
+            // ScriptableRendererData.SetDirty(): the renderer rebuilds its passes with the new feature
+            var setDirty = FindType(RendererDataType)?.GetMethod("SetDirty", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly, null, Type.EmptyTypes, null);
+            try { setDirty?.Invoke(rendererData, null); }
+            catch (TargetInvocationException) { /* only a refresh hint */ }
+            AssetDatabase.SaveAssetIfDirty(rendererData);
+            return true;
+        }
+
+        static void SetBool(SerializedObject so, string path, bool v) { var p = so.FindProperty(path); if (p != null) p.boolValue = v; }
+        static void SetInt(SerializedObject so, string path, int v) { var p = so.FindProperty(path); if (p != null) p.intValue = v; }
+        static void SetFloat(SerializedObject so, string path, float v) { var p = so.FindProperty(path); if (p != null) p.floatValue = v; }
+
+        // Real-time reflection probes on in every quality level (ProjectSettings/QualitySettings.asset,
+        // m_QualitySettings[i].realtimeReflectionProbes): Ultra's live reflections render in the Editor and
+        // in builds. The game sets texture filtering and the rest of each level itself.
+        static void SetQualityLevels(Report report)
+        {
+            var qs = QualitySettings.GetQualitySettings();
+            if (qs == null) { report.Warn("Quality settings not found; Ultra turns real-time reflection probes on at run time."); return; }
+            int levels = 0;
+            using (var so = new SerializedObject(qs))
+            {
+                var list = so.FindProperty("m_QualitySettings");
+                if (list == null) { report.Warn("Quality levels not found; Ultra turns real-time reflection probes on at run time."); return; }
+                for (int i = 0; i < list.arraySize; i++)
+                {
+                    var level = list.GetArrayElementAtIndex(i);
+                    var probes = level.FindPropertyRelative("realtimeReflectionProbes");
+                    if (probes == null) continue;
+                    probes.boolValue = true;
+                    levels++;
+                }
+                so.ApplyModifiedPropertiesWithoutUndo();
+            }
+            AssetDatabase.SaveAssets();
+            report.Ok("Quality levels: real-time reflection probes on (" + levels + " level(s)); render scale, MSAA, shadows, SSAO and texture filtering are set by the game's Graphics level");
         }
 
         // ---- textures -----------------------------------------------------------------------

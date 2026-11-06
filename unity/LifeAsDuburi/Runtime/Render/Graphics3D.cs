@@ -6,10 +6,16 @@
 // probes. Ambient sums the scenery's hemisphere light and the environment's diffuse part; the
 // environment's specular part is a custom-cubemap ReflectionProbe. Light intensities are three's / PI
 // (Unity's light units include the PI that three's BRDF_Lambert divides by).
+//
+// Ultra adds LiveReflection: a real-time reflection probe of the arena (rendered by URP one cube face
+// per frame, again and again), so the metal, brass, chrome and acrylic parts reflect the real pool or
+// seabed, the course and the other vehicles instead of the gradient. Screen-space reflections and ray
+// tracing do not exist in URP / WebGL 2; this is the closest real-time reflection they offer.
 
 using Duburi.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace Duburi.Game
 {
@@ -182,7 +188,8 @@ namespace Duburi.Game
         /// setupShadows(renderer, scene, sceneryRoot, size, arena): the scenery's sun casts onto the
         /// floor, course and vehicles; high sun, slightly from the south-east, over the arena centre.
         /// Returns the sun, or null when shadows are off (the sun then keeps the scenery's direction).
-        public static Light SetupShadows(Scenery scenery, int size, Arena arena)
+        /// hq (Ultra): URP's highest soft-shadow filter (7x7 tent) on the sun.
+        public static Light SetupShadows(Scenery scenery, int size, Arena arena, bool hq = false)
         {
             if (scenery == null || scenery.Sun == null) return null;
             var sun = scenery.Sun;
@@ -194,6 +201,9 @@ namespace Duburi.Game
             }
             sun.shadows = LightShadows.Soft;   // PCFSoftShadowMap
             sun.shadowStrength = 1f;
+            // the filter quality is a per-light shader value (no extra variant): High = 7x7 tent
+            var ad = sun.GetUniversalAdditionalLightData();
+            if (ad != null) ad.softShadowQuality = hq ? SoftShadowQuality.High : SoftShadowQuality.UsePipelineSettings;
             // the floor and everything in the water receive
             if (scenery.root != null)
                 foreach (var r in scenery.root.GetComponentsInChildren<MeshRenderer>(true))
@@ -205,6 +215,9 @@ namespace Duburi.Game
             return sun;
         }
 
+        /// Ultra: a live reflection probe of the arena (null when the level has none)
+        public static LiveReflection MakeLiveReflection(ScenarioLook look, Arena arena, bool pool) => LiveReflection.Create(look, arena, pool);
+
         /// castShadows(obj, cast, receive): opaque meshes cast, everything receives
         public static void CastShadows(GameObject obj, bool cast = true, bool receive = true)
         {
@@ -214,6 +227,81 @@ namespace Duburi.Game
                 r.shadowCastingMode = cast && !Mats.IsTransparent(r.sharedMaterial) ? ShadowCastingMode.On : ShadowCastingMode.Off;
                 r.receiveShadows = receive;
             }
+        }
+    }
+
+    /// Ultra's real-time reflections: a ReflectionProbe at the arena centre (Unity world), box-projected
+    /// onto the arena (floor, pool walls, surface) and re-rendered all the time, one cube face per frame
+    /// (time slicing), so the vehicles' metal and acrylic parts mirror the scene as it is. It takes over
+    /// from the gradient environment (importance 10) only after its first complete render, so nothing
+    /// ever reflects an empty cube map. Tick() once per frame (SceneExtras.Tick from Views.DrawView).
+    public sealed class LiveReflection
+    {
+        public const int Resolution = 256;
+        const int WaitImportance = 0, ReadyImportance = 20;
+
+        public GameObject go;
+        public ReflectionProbe probe;
+        int renderId = -1, lastFrame = -1;
+        bool ready;
+
+        /// the probe has finished its first render and is in use
+        public bool Ready => ready;
+
+        LiveReflection() { }
+
+        /// pool: the box stops at the pool walls (0.4 m above the water); open water: it reaches 30 m
+        /// past the arena (the fog hides the rest), floor to surface
+        public static LiveReflection Create(ScenarioLook look, Arena arena, bool pool)
+        {
+            arena = arena ?? Course.ARENA;
+            float W = (float)arena.width, L = (float)arena.length, D = (float)arena.depth;
+            float top = pool ? 0.4f : 0f, margin = pool ? 0f : 30f;
+            GraphicsQuality.UseRealtimeReflectionProbes();
+            var go = new GameObject("Live reflections");
+            go.transform.position = Space.ToUnity(0, -D / 2, 0);
+            var p = go.AddComponent<ReflectionProbe>();
+            p.mode = ReflectionProbeMode.Realtime;
+            p.refreshMode = ReflectionProbeRefreshMode.ViaScripting;
+            p.timeSlicingMode = ReflectionProbeTimeSlicingMode.IndividualFaces;
+            p.resolution = Resolution;
+            p.hdr = true;
+            p.size = new Vector3(W + 2 * margin, D + top, L + 2 * margin);
+            p.center = new Vector3(0, top / 2, 0);      // box from the floor (-D) to 'top', probe at -D / 2
+            p.boxProjection = true;                      // needs the URP asset's box projection (Set Up Project)
+            p.blendDistance = 1f;
+            p.importance = WaitImportance;
+            p.intensity = 1f;
+            // vehicles passing right next to the capture point would fill the whole cube: clip them
+            p.nearClipPlane = 1.5f;
+            p.farClipPlane = 200f;
+            p.shadowDistance = 40f;
+            p.clearFlags = ReflectionProbeClearFlags.SolidColor;
+            p.backgroundColor = Colors.Rgb(look != null ? look.fog : 0x3aa6c9);
+            p.cullingMask = ~(1 << BotThumbs.Layer);
+            return new LiveReflection { go = go, probe = p };
+        }
+
+        /// once per frame: start the next render when the last one is done
+        public void Tick()
+        {
+            if (probe == null) return;
+            int f = Time.frameCount;
+            if (f == lastFrame) return;
+            lastFrame = f;
+            if (renderId >= 0 && !probe.IsFinishedRendering(renderId)) return;
+            if (renderId >= 0 && !ready)
+            {
+                ready = true;
+                probe.importance = ReadyImportance;
+            }
+            renderId = probe.RenderProbe();
+        }
+
+        public void Dispose()
+        {
+            if (go != null) Object.Destroy(go);
+            go = null; probe = null;
         }
     }
 }

@@ -296,7 +296,7 @@ namespace Duburi.Game
                 B("forfeit", "Forfeit run", "lose this run's points and start again from the dock", "warn", () => onAction?.Invoke("forfeit"));
                 if (humans > 1) B("leave", "Leave match", "the others keep playing", "warn", () => onAction?.Invoke("leave"));
                 B("restart", "Restart match", "same players, same water", "", () => onAction?.Invoke("restart"));
-                B("quality", "Graphics: " + GraphicsQuality.Label(GraphicsQuality.Current), "Ultra (4K) · High · Medium · Low", "", () =>
+                B("quality", "Graphics: " + GraphicsQuality.Label(GraphicsQuality.Current), "Ultra (4K, SSAO, live reflections) · High · Medium · Low", "", () =>
                 {
                     var order = GraphicsQuality.Order;
                     int k = Array.IndexOf(order, GraphicsQuality.Current);

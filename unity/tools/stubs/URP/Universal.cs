@@ -2,6 +2,8 @@
 // that LifeAsDuburi/Runtime/Render uses. Only members that exist in the real package with the same
 // signature; '// file:line' = where it is declared in Packages/com.unity.render-pipelines.universal/Runtime.
 // Bodies are dummies.
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -48,6 +50,35 @@ namespace UnityEngine.Rendering.Universal
         public bool usePipelineSettings { get; set; }            // UniversalAdditionalLightData.cs:42
         public Vector2 lightCookieSize { get; set; }             // UniversalAdditionalLightData.cs:139
         public Vector2 lightCookieOffset { get; set; }           // UniversalAdditionalLightData.cs:150
+        public SoftShadowQuality softShadowQuality { get; set; } // UniversalAdditionalLightData.cs:161
+    }
+
+    // Data/UniversalRenderPipelineAsset.cs:39
+    public enum SoftShadowQuality
+    {
+        UsePipelineSettings,                   // Data/UniversalRenderPipelineAsset.cs:45
+        Low,                                   // Data/UniversalRenderPipelineAsset.cs:50
+        Medium,                                // Data/UniversalRenderPipelineAsset.cs:54
+        High,                                  // Data/UniversalRenderPipelineAsset.cs:58
+    }
+
+    // ScriptableRendererData.cs:18
+    public abstract partial class ScriptableRendererData : ScriptableObject
+    {
+        public List<ScriptableRendererFeature> rendererFeatures => null; // ScriptableRendererData.cs:51
+    }
+
+    // ScriptableRendererFeature.cs:12 (the abstract Create / AddRenderPasses are left out of the stub)
+    public abstract partial class ScriptableRendererFeature : ScriptableObject, IDisposable
+    {
+        public bool isActive => true;                            // ScriptableRendererFeature.cs:18
+        public void SetActive(bool active) { }                   // ScriptableRendererFeature.cs:123
+        public void Dispose() { }                                // ScriptableRendererFeature.cs:132
+    }
+
+    // RendererFeatures/ScreenSpaceAmbientOcclusion.cs:118
+    public partial class ScreenSpaceAmbientOcclusion : ScriptableRendererFeature
+    {
     }
 
     // Data/UniversalRenderPipelineAsset.cs:318
@@ -69,6 +100,19 @@ namespace UnityEngine.Rendering.Universal
         public int mainLightShadowmapResolution { get; set; }    // Data/UniversalRenderPipelineAsset.cs:1320
         public float shadowDistance { get; set; }                // Data/UniversalRenderPipelineAsset.cs:1463
         public int shadowCascadeCount { get; set; }              // Data/UniversalRenderPipelineAsset.cs:1472
+        public ReadOnlySpan<ScriptableRendererData> rendererDataList => default; // Data/UniversalRenderPipelineAsset.cs:688
+        public bool supportsCameraDepthTexture { get; set; }     // Data/UniversalRenderPipelineAsset.cs:1051
+        public bool supportsMainLightShadows => false;           // Data/UniversalRenderPipelineAsset.cs:1305 (setter internal)
+        public bool reflectionProbeBlending => false;            // Data/UniversalRenderPipelineAsset.cs:1413 (setter internal)
+        public bool reflectionProbeBoxProjection => false;       // Data/UniversalRenderPipelineAsset.cs:1431 (setter internal)
+        public float cascade2Split { get; set; }                 // Data/UniversalRenderPipelineAsset.cs:1489
+        public Vector3 cascade4Split { get; set; }               // Data/UniversalRenderPipelineAsset.cs:1509
+        public float cascadeBorder { get; set; }                 // Data/UniversalRenderPipelineAsset.cs:1518
+        public float shadowDepthBias { get; set; }               // Data/UniversalRenderPipelineAsset.cs:1527
+        public float shadowNormalBias { get; set; }              // Data/UniversalRenderPipelineAsset.cs:1536
+        public bool supportsSoftShadows => false;                // Data/UniversalRenderPipelineAsset.cs:1545 (setter internal)
+        public bool supportsLightCookies => false;               // Data/UniversalRenderPipelineAsset.cs:1579
+        public bool conservativeEnclosingSphere { get; set; }    // Data/UniversalRenderPipelineAsset.cs:1699
     }
 
     // Overrides/Bloom.cs:8
@@ -94,6 +138,30 @@ namespace UnityEngine.Rendering.Universal
         public BoolParameter highQualityFiltering;               // Overrides/Bloom.cs:208
         public DownscaleParameter downscale;                     // Overrides/Bloom.cs:220
         public ClampedIntParameter maxIterations;                // Overrides/Bloom.cs:226
+    }
+
+    // Overrides/DepthOfField.cs:8
+    public enum DepthOfFieldMode
+    {
+        Off,                                   // Overrides/DepthOfField.cs:13
+        Gaussian,                              // Overrides/DepthOfField.cs:18
+        Bokeh,                                 // Overrides/DepthOfField.cs:23
+    }
+
+    // Overrides/DepthOfField.cs:149
+    public sealed partial class DepthOfField : VolumeComponent
+    {
+        public DepthOfFieldModeParameter mode;                   // Overrides/DepthOfField.cs:155
+        public MinFloatParameter gaussianStart;                  // Overrides/DepthOfField.cs:161
+        public MinFloatParameter gaussianEnd;                    // Overrides/DepthOfField.cs:167
+        public ClampedFloatParameter gaussianMaxRadius;          // Overrides/DepthOfField.cs:173
+        public BoolParameter highQualitySampling;                // Overrides/DepthOfField.cs:179
+    }
+
+    // Overrides/DepthOfField.cs:241
+    public sealed partial class DepthOfFieldModeParameter : VolumeParameter<DepthOfFieldMode>
+    {
+        public DepthOfFieldModeParameter(DepthOfFieldMode value, bool overrideState = false) : base(value, overrideState) { } // Overrides/DepthOfField.cs:248
     }
 
     // Overrides/Tonemapping.cs:8
