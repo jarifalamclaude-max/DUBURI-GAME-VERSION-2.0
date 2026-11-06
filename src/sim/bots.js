@@ -24,9 +24,12 @@ export const BOTS = {
     addedMass: [6.36, 7.12, 18.68, 0.189, 0.135, 0.222],
     dampLin: [13.7, 8, 33, 0.4, 0.8, 0.5],
     dampQuad: [141, 217, 190, 1.19, 0.47, 1.5],
-    thrusters: heavyLayout().map((t, i) => ({ ...t, preset: 't200-16v', hand: i % 2 ? -1 : 1 })),
+    // the real DUBURI: horizontal thrusters right under the bracket wings, beside the hull and next to (not
+    // into) the vertical thruster at the wing tip
+    thrusters: heavyLayout().map((t, i) => ({ ...t, pos: t.axis[2] ? t.pos : [Math.sign(t.pos[0]) * 0.163, Math.sign(t.pos[1]) * 0.092, -0.04], preset: 't200-16v', hand: i % 2 ? -1 : 1 })),
     spheres: [[0.11, 0, 0, 0.21], [-0.11, 0, 0, 0.21]],
-    gripper: [0.27, 0, 0.14], marker: [0, 0, 0.15], torpedo: [0.25, 0, 0.05],
+    // gripper under the front of the frame; torpedo launcher tucked under the front porthole
+    gripper: [0.15, 0, 0.14], marker: [0, 0, 0.15], torpedo: [0.21, 0, 0.073],
   },
   barracuda: {
     id: 'barracuda',

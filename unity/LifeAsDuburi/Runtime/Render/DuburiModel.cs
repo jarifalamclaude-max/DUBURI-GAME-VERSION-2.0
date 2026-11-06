@@ -43,7 +43,7 @@ namespace Duburi.Game
         static void DuburiMats(Ctx ctx)
         {
             var M = ctx.M;
-            M["dHull"] = Std(0xc6c1bc, 0.1f, 0.5f);                     // Opaque(198,193,188)
+            M["dHull"] = Std(0x8c8c8c, 0.45f, 0.5f);                    // the CAD hull: Aluminum - Anodized (Grey)
             M["dAnod"] = Std(0x898989, 0.55f, 0.55f);                   // Aluminum - Anodized Rough (Grey)
             M["dPowder"] = Std(0x191919, 0.05f, 0.82f);                 // Powder Coat (Black)
             M["dT200"] = Std(0x141414, 0.05f, 0.38f);                   // Opaque(25,25,25): moulded thruster plastic
@@ -57,7 +57,7 @@ namespace Duburi.Game
             // Few materials = few draw calls after MergeStatic (it merges per material object): the
             // battery (Opaque(191,189,187)) shares the hull grey, dark recesses the thruster black, and
             // the shared payload builders (gripper, marker dropper) use DUBURI's own metals.
-            M["dBatt"] = M["dHull"];
+            M["dBatt"] = Std(0xbfbdbb, 0.1f, 0.5f);                     // Opaque(191,189,187): battery box
             M["dStainless"] = M["dSteel"];
             M["dWell"] = M["dAnod"];
             M["dDeck"] = M["dT200"];
@@ -199,7 +199,7 @@ namespace Duburi.Game
             {
                 props = props,
                 sensors = null,                                       // camera behind the porthole (DuburiHull)
-                grip = new GripSpec { s = 1.2f, arm = 0.08f, post = 0.025f },
+                grip = new GripSpec { s = 1f, arm = 0.03f, post = 0.022f },  // compact, under the front of the frame
                 torpedoes = DuburiLauncher(ctx, root, d.torpedo),
             };
         }
@@ -211,8 +211,6 @@ namespace Duburi.Game
             float h = HULL_BOT - HULL_TOP;
             Part(root, Geo.Prism(8, HULL_A, h, true), M["dHull"], 0, 0, (HULL_TOP + HULL_BOT) / 2, "hull");
             Part(root, Geo.Prism(8, 0.128f, 0.006f), M["dAnod"], 0, 0, HULL_BOT + 0.003f, "hull_bottom");
-            // team colour band round the lower hull, so players can tell the robots apart
-            Part(root, Geo.Prism(8, HULL_A + 0.0012f, 0.014f, true), M["team"], 0, 0, -0.005, "team_band");
 
             // lid: octagon plate with the hatch opening
             var lid = Poly(Octagon(LID_A));
@@ -253,16 +251,10 @@ namespace Duburi.Game
                 }
             Part(root, CylZ(0.0065f, 0.0065f, 0.008f, 12), M["dStainless"], -HULL_A - 0.004, 0, -0.012);
 
-            // logo stickers on the two side faces, below the latches
-            if (tex != null)
-            {
-                foreach (float side in new[] { -1f, 1f })
-                {
-                    var l = LogoPlane(ctx, tex, 0.08f, side * PI / 2);
-                    l.position = new Vector3(side * (HULL_A + 0.0008f), 0.029f, 0);
-                    root.Add(l);
-                }
-            }
+            // status light at the back of the lid in the player's colour, so players can tell the robots
+            // apart (the CAD has no team markings)
+            Part(root, CylZ(0.011f, 0.011f, 0.004f, 16).RotateX(PI / 2), M["dT200"], -0.100, 0, HULL_TOP - LID_T - 0.002, "status_base");
+            Part(root, Geo.Sphere(0.008f, 16, 8, 0, 2 * PI, 0, PI / 2), M["team"], -0.100, 0, HULL_TOP - LID_T - 0.004, "status_light");
         }
 
         // Eight toggle latches round the lid: two on each side face, one on each diagonal face.
@@ -332,7 +324,8 @@ namespace Duburi.Game
                     Part(root, PlateGeo(top, wt, P(0, 0, wz), tan, rad), M["dAnod"], Vector3.zero, "wing");
 
                     // web in (tangential, up), against the hull corner and down below it
-                    var web = Poly(-0.045f, 0.030f, 0.035f, 0.030f, 0.012f, -0.010f, 0.012f, -0.100f, -0.072f, -0.100f, -0.072f, -0.010f);
+                    // from the wing down beside the hull to the horizontal thruster (design z -0.04)
+                    var web = Poly(-0.045f, 0.094f, 0.035f, 0.094f, 0.035f, 0.030f, 0.012f, -0.012f, -0.072f, -0.012f, -0.072f, 0.030f);
                     Part(root, PlateGeo(web, webT, rad * webR, tan, Vector3.up), M["dAnod"], Vector3.zero, "wing_web");
                 }
 
@@ -523,20 +516,19 @@ namespace Duburi.Game
             foreach (float x in new[] { -0.031f, 0.031f }) g.Add(At(Mesh(rod, M["dRed"]), x, 0.029f, -0.015f));
             g.Add(At(Mesh(Geo.Box(0.03f, 0.016f, 0.04f), M["dAnod"]), 0, 0.04f, -0.015f));        // release servo
             g.Add(At(Mesh(Geo.Box(0.008f, 0.004f, 0.03f), M["dT200"]), 0, 0.05f, -0.015f));       // servo horn
-            g.Add(At(Mesh(Geo.Box(0.1f, 0.03f, 0.005f), M["dAnod"]), 0, -0.0525f, 0.045f));       // mount bracket
-            g.Add(At(Mesh(Geo.Box(0.1f, 0.005f, 0.055f), M["dAnod"]), 0, -0.065f, 0.0675f));
 
             var loaded = new Node[2];
             for (int i = 0; i < 2; i++)
             {
-                var torp = ItemNode("torpedo", ctx.hex);
+                var torp = ItemNode("torpedo", "#f4f4f4"); // white, as on the real launcher
                 torp.name = "torpedo_" + i;
                 torp.position = new Vector3((i == 0 ? -1 : 1) * 0.031f, 0, -0.012f);
                 g.Add(torp);
                 loaded[i] = torp;
             }
-            g.scale = Vector3.one * 0.6f; // a compact launcher tucked under the porthole, like the real one
-            Add(root, g, B(b.x + 0.02, b.y, b.z));
+            // tucked under the front porthole, hanging from the frame's top plate, noses at the launch point
+            g.scale = Vector3.one * 0.85f;
+            Add(root, g, B(b.x - 0.06, b.y, b.z));
             return loaded;
         }
     }

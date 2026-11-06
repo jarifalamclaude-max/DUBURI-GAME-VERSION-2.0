@@ -681,7 +681,7 @@ namespace Duburi.Game
 
             if (spec.sensors != null) AddSensors(ctx, group, spec.sensors);
             var grip = AddGripper(ctx, group, design.gripper, spec.grip, out var fingers, out var tip);
-            var markers = AddMarkers(ctx, group, design.marker, color);
+            var markers = AddMarkers(ctx, group, design.marker, design.id == "duburi" ? "#f4f4f4" : color); // DUBURI: white, as on the real robot
             var torpedoes = spec.torpedoes ?? AddTorpedoes(ctx, group, design.torpedo, color, spec.torp);
             var props = spec.props;
 

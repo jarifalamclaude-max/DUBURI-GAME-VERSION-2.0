@@ -59,6 +59,13 @@ namespace Duburi.Core
             return c;
         }
 
+        static ThrusterDef WithPos(ThrusterDef t, V3 pos)
+        {
+            var c = t.Clone();
+            c.pos = pos;
+            return c;
+        }
+
         static ThrusterDef T(string name, V3 pos, V3 axis, string preset, double? hand) => new ThrusterDef { name = name, pos = pos, axis = axis, preset = preset, hand = hand };
 
         static ThrusterDef[] KrakenThrusters()
@@ -119,9 +126,12 @@ namespace Duburi.Core
                 addedMass = new[] { 6.36, 7.12, 18.68, 0.189, 0.135, 0.222 },
                 dampLin = new double[] { 13.7, 8, 33, 0.4, 0.8, 0.5 },
                 dampQuad = new[] { 141, 217, 190, 1.19, 0.47, 1.5 },
-                thrusters = Map(Frames.HeavyLayout(), (t, i) => With(t, "t200-16v", i % 2 != 0 ? -1 : 1)),
+                // the real DUBURI: horizontal thrusters right under the bracket wings, beside the hull and next to (not
+                // into) the vertical thruster at the wing tip
+                thrusters = Map(Frames.HeavyLayout(), (t, i) => With(t.axis.z != 0 ? t : WithPos(t, new V3((t.pos.x > 0 ? 1 : -1) * 0.163, (t.pos.y > 0 ? 1 : -1) * 0.092, -0.04)), "t200-16v", i % 2 != 0 ? -1 : 1)),
                 spheres = new[] { new Sphere(0.11, 0, 0, 0.21), new Sphere(-0.11, 0, 0, 0.21) },
-                gripper = new V3(0.27, 0, 0.14), marker = new V3(0, 0, 0.15), torpedo = new V3(0.25, 0, 0.05),
+                // gripper under the front of the frame; torpedo launcher tucked under the front porthole
+                gripper = new V3(0.15, 0, 0.14), marker = new V3(0, 0, 0.15), torpedo = new V3(0.21, 0, 0.073),
             },
             ["barracuda"] = new BotDesign
             {
