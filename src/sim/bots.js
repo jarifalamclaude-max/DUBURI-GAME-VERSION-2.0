@@ -26,7 +26,7 @@ export const BOTS = {
     dampQuad: [141, 217, 190, 1.19, 0.47, 1.5],
     thrusters: heavyLayout().map((t, i) => ({ ...t, preset: 't200-16v', hand: i % 2 ? -1 : 1 })),
     spheres: [[0.11, 0, 0, 0.21], [-0.11, 0, 0, 0.21]],
-    gripper: [0.27, 0, 0.14], marker: [0, 0, 0.15], torpedo: [0.25, 0.12, 0.05],
+    gripper: [0.27, 0, 0.14], marker: [0, 0, 0.15], torpedo: [0.25, 0, 0.05],
   },
   barracuda: {
     id: 'barracuda',

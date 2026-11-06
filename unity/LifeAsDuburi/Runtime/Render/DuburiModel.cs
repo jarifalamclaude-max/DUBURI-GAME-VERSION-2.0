@@ -535,7 +535,8 @@ namespace Duburi.Game
                 g.Add(torp);
                 loaded[i] = torp;
             }
-            Add(root, g, B(b.x + 0.05, b.y, b.z));
+            g.scale = Vector3.one * 0.6f; // a compact launcher tucked under the porthole, like the real one
+            Add(root, g, B(b.x + 0.02, b.y, b.z));
             return loaded;
         }
     }

@@ -121,7 +121,7 @@ namespace Duburi.Core
                 dampQuad = new[] { 141, 217, 190, 1.19, 0.47, 1.5 },
                 thrusters = Map(Frames.HeavyLayout(), (t, i) => With(t, "t200-16v", i % 2 != 0 ? -1 : 1)),
                 spheres = new[] { new Sphere(0.11, 0, 0, 0.21), new Sphere(-0.11, 0, 0, 0.21) },
-                gripper = new V3(0.27, 0, 0.14), marker = new V3(0, 0, 0.15), torpedo = new V3(0.25, 0.12, 0.05),
+                gripper = new V3(0.27, 0, 0.14), marker = new V3(0, 0, 0.15), torpedo = new V3(0.25, 0, 0.05),
             },
             ["barracuda"] = new BotDesign
             {
